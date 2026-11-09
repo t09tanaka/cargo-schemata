@@ -18,7 +18,7 @@ use serde::Serialize;
 use crate::diag::{Diag, ErrSig, parse_messages};
 use crate::mutant::Mutant;
 use crate::proc::{Sink, run_group};
-use crate::rewrite::{FilePlan, Placement, RUNTIME_MODULE, Rendered, apply_single, placement};
+use crate::rewrite::{FilePlan, Placement, Rendered, apply_single, placement, runtime_module};
 use crate::sync::{Overrides, sync_tree, write_if_changed};
 use crate::workspace::{Package, Workspace};
 
@@ -182,6 +182,8 @@ struct Embedded<'a> {
     files: BTreeMap<PathBuf, FileEntry>,
     work: &'a Path,
     arm_ids: Vec<usize>,
+    /// One more than the highest mutant id.
+    ids: usize,
     runs: usize,
     probes: usize,
     max_runs: usize,
@@ -205,7 +207,7 @@ impl Embedded<'_> {
                     },
                 };
                 if f.is_root {
-                    r.text.push_str(RUNTIME_MODULE);
+                    r.text.push_str(&runtime_module(self.ids));
                 }
                 (rel.clone(), r)
             })
@@ -415,6 +417,7 @@ pub fn prepare(
         files,
         work: &work,
         arm_ids,
+        ids: mutants.iter().map(|m| m.id + 1).max().unwrap_or(0),
         runs: 0,
         probes: 0,
         max_runs: opts.max_checks,

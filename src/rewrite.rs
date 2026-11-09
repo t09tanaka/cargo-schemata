@@ -21,21 +21,65 @@ use syn::spanned::Spanned;
 use crate::mutant::{Context, Genre, Mutant};
 use crate::span::{LineColumn, LineIndex};
 
-/// Module appended to the root file of every target.
-pub const RUNTIME_MODULE: &str = "
+/// The environment variable that turns the runtime into a recorder: it names a
+/// file, and the first time a mutant's code is reached the id is appended to it.
+pub const TRACE_ENV: &str = "CARGO_SCHEMATA_TRACE";
+
+/// Module appended to the root file of every target. `ids` is one more than
+/// the highest mutant id; the recorder keeps one bit for each.
+///
+/// With neither variable set, or with `CARGO_SCHEMATA_MUTANT=N`, `on` costs one
+/// read of a `OnceLock`. With `CARGO_SCHEMATA_TRACE=<file>` it never selects a
+/// mutant: each id is appended (one line, `O_APPEND`) the first time it is asked
+/// for in this process, so several copies of the module (a library linked into
+/// test binaries) and child processes can share one file.
+pub fn runtime_module(ids: usize) -> String {
+    let words = ids.div_ceil(64).max(1);
+    format!(
+        "
 #[doc(hidden)]
 #[allow(dead_code, unused)]
-pub(crate) mod __schemata {
-    pub fn on(n: u32) -> bool {
-        static SELECTED: ::std::sync::OnceLock<Option<u32>> = ::std::sync::OnceLock::new();
-        *SELECTED.get_or_init(|| {
-            ::std::env::var(\"CARGO_SCHEMATA_MUTANT\")
-                .ok()
-                .and_then(|s| s.parse().ok())
-        }) == Some(n)
-    }
+pub(crate) mod __schemata {{
+    struct Trace {{
+        file: ::std::fs::File,
+        seen: ::std::vec::Vec<::std::sync::atomic::AtomicU64>,
+    }}
+    struct State {{
+        selected: Option<u32>,
+        trace: Option<Trace>,
+    }}
+    fn init() -> State {{
+        let selected = ::std::env::var(\"CARGO_SCHEMATA_MUTANT\")
+            .ok()
+            .and_then(|s| s.parse().ok());
+        let trace = ::std::env::var_os(\"CARGO_SCHEMATA_TRACE\")
+            .and_then(|path| {{
+                ::std::fs::OpenOptions::new().append(true).create(true).open(path).ok()
+            }})
+            .map(|file| Trace {{
+                file,
+                seen: (0..{words}).map(|_| ::std::sync::atomic::AtomicU64::new(0)).collect(),
+            }});
+        State {{ selected, trace }}
+    }}
+    pub fn on(n: u32) -> bool {{
+        static STATE: ::std::sync::OnceLock<State> = ::std::sync::OnceLock::new();
+        let state = STATE.get_or_init(init);
+        if let Some(trace) = &state.trace {{
+            let bit = 1u64 << (n % 64);
+            if let Some(word) = trace.seen.get((n / 64) as usize) {{
+                if word.fetch_or(bit, ::std::sync::atomic::Ordering::Relaxed) & bit == 0 {{
+                    let _ = ::std::io::Write::write_all(&mut &trace.file, format!(\"{{n}}\\n\").as_bytes());
+                }}
+            }}
+            return false;
+        }}
+        state.selected == Some(n)
+    }}
+}}
+"
+    )
 }
-";
 
 /// If a top-level rewritten expression would grow past this many bytes, its
 /// outermost mutants are built one at a time instead.
