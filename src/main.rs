@@ -6,9 +6,11 @@
 mod diag;
 mod exec;
 mod fnvalue;
+mod in_diff;
 mod interrupt;
 mod list;
 mod lock;
+mod merge;
 mod mutant;
 mod options;
 mod path;
@@ -19,6 +21,7 @@ mod report;
 mod results;
 mod rewrite;
 mod route;
+mod shard;
 mod span;
 mod sync;
 mod visit;
@@ -34,11 +37,13 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 
 use crate::exec::{Baseline, Ran, Tests};
+use crate::in_diff::DiffFilterError;
 use crate::interrupt::Interrupted;
 use crate::mutant::Mutant;
-use crate::options::{Config, Filters, Options};
+use crate::options::{Config, Filters, Options, Usage};
 use crate::prepare::Single;
 use crate::results::{Counts, MutantResult, Status};
+use crate::shard::Shard;
 use crate::workspace::{Package, PackageFilter, Workspace};
 
 /// Mutation testing for Rust that builds mutants once, as schemata.
@@ -106,6 +111,17 @@ struct Args {
     /// Regex for mutants to exclude, matched against the names shown by `--list`.
     #[arg(long, short = 'E', alias = "exclude-regex", help_heading = "Filters")]
     exclude_re: Vec<String>,
+
+    /// Mutate only the code that this unified diff (`git diff` output; `-` for
+    /// standard input) adds or changes: the mutants whose lines it touches.
+    #[arg(long, short = 'D', value_name = "FILE", help_heading = "Filters")]
+    in_diff: Option<Utf8PathBuf>,
+
+    /// Run only part `k` of `n` of the mutants (`k` from 0), like cargo-mutants: part
+    /// 0 gets the first `ceil(total / n)` mutants, and so on. The report is then a part;
+    /// `cargo schemata merge` puts the parts together.
+    #[arg(long, value_name = "K/N", help_heading = "Filters")]
+    shard: Option<Shard>,
 
     /// Mutate only this package; may be repeated.
     #[arg(long = "package", short = 'p', help_heading = "Filters")]
@@ -243,10 +259,37 @@ fn strip_subcommand(args: Vec<String>) -> Vec<String> {
     out
 }
 
+/// `cargo schemata merge <part.json>... --output <dir>`
+#[derive(Parser, Debug)]
+#[command(name = "cargo-schemata merge", bin_name = "cargo schemata merge")]
+struct MergeArgs {
+    /// The `report.json` of each part of a run that was divided with `--shard`.
+    #[arg(required = true)]
+    parts: Vec<Utf8PathBuf>,
+
+    /// Write `report.json` and the `*.txt` lists of the whole run to this directory.
+    #[arg(long, short = 'o', default_value = "schemata.out")]
+    output: Utf8PathBuf,
+
+    /// Also print the merged report on stdout.
+    #[arg(long)]
+    json: bool,
+}
+
 struct Setup {
     workspace: Workspace,
     packages: Vec<Arc<Package>>,
     mutants: Vec<Mutant>,
+    /// `--in-diff` left nothing to test (the diff is empty, or touches no mutant).
+    diff_left_nothing: bool,
+}
+
+/// The mutants of one part of a divided run, or all of them.
+fn part_of(all: &[Mutant], shard: Option<Shard>) -> Vec<Mutant> {
+    match shard {
+        Some(shard) => all[shard.range(all.len())].to_vec(),
+        None => all.to_vec(),
+    }
 }
 
 fn discover(args: &Args) -> Result<Setup> {
@@ -288,12 +331,26 @@ fn discover(args: &Args) -> Result<Setup> {
         PackageFilter::Auto(start_dir.to_owned())
     };
     let packages = workspace.select(&package_filter)?;
-    let mutants = visit::walk_tree(workspace.root(), &packages, &options)
+    let mut mutants = visit::walk_tree(workspace.root(), &packages, &options)
         .context("failed to discover mutants")?;
+    let mut diff_left_nothing = false;
+    if let Some(diff_path) = &args.in_diff {
+        mutants = match in_diff::diff_filter_file(mutants, diff_path) {
+            Ok(mutants) => mutants,
+            // not a failure: there is nothing to test
+            Err(e) if e.exit_code() == 0 => {
+                eprintln!("cargo schemata: {e}");
+                diff_left_nothing = true;
+                Vec::new()
+            }
+            Err(e) => return Err(e.into()),
+        };
+    }
     Ok(Setup {
         workspace,
         packages,
         mutants,
+        diff_left_nothing,
     })
 }
 
@@ -309,7 +366,12 @@ fn schemata_dir(workspace: &Workspace) -> std::path::PathBuf {
 }
 
 fn run_list_or_build(args: &Args) -> Result<String> {
-    let setup = discover(args)?;
+    let mut setup = discover(args)?;
+    if setup.diff_left_nothing {
+        // as cargo-mutants: nothing to list or build, and not even an empty list
+        return Ok(String::new());
+    }
+    setup.mutants = part_of(&setup.mutants, args.shard);
     if args.build_only {
         let _lock = lock::Lock::acquire(&schemata_dir(&setup.workspace))?;
         let mut prepared = prepare::prepare(
@@ -343,8 +405,11 @@ fn run_tests(args: &Args) -> Result<i32> {
     let Setup {
         workspace,
         packages,
-        mutants,
+        mutants: all_mutants,
+        ..
     } = setup;
+    // The mutants of this part of the run; the report lists all of them.
+    let mutants = part_of(&all_mutants, args.shard);
     let json = args.json;
     // With --json, stdout is the report alone.
     let say = move |line: String| {
@@ -546,7 +611,12 @@ fn run_tests(args: &Args) -> Result<i32> {
 
     results.sort_by_key(|r| r.id);
     let counts = Counts::of(&results);
-    let report = results::report_json(&mutants, &results, limit);
+    let report = results::report_json(
+        &all_mutants,
+        &results,
+        limit,
+        args.shard.map(|s| (s.k, s.n)),
+    );
     results::write_output(out_dir, &mutants, &results, &report)?;
     if json {
         println!(
@@ -563,17 +633,26 @@ fn run_tests(args: &Args) -> Result<i32> {
             }
         }
         eprintln!(
-            "cargo schemata: FAILED ({})",
+            "cargo schemata: FAILED ({}{})",
+            shard_note(args.shard, all_mutants.len(), mutants.len()),
             counts.text(started.elapsed())
         );
         Ok(1)
     } else {
         say(format!(
-            "cargo schemata: OK ({})",
+            "cargo schemata: OK ({}{})",
+            shard_note(args.shard, all_mutants.len(), mutants.len()),
             counts.text(started.elapsed())
         ));
         Ok(0)
     }
+}
+
+/// For the last line of a part of a run: which part, and how many mutants it had.
+fn shard_note(shard: Option<Shard>, all: usize, own: usize) -> String {
+    shard.map_or_else(String::new, |s| {
+        format!("shard {}/{}: {own} of {all} mutants; ", s.k, s.n)
+    })
 }
 
 fn finish(result: Result<i32>) -> ExitCode {
@@ -585,13 +664,29 @@ fn finish(result: Result<i32>) -> ExitCode {
                 return ExitCode::from(*code as u8);
             }
             eprintln!("error: {err:#}");
+            if err.downcast_ref::<Usage>().is_some() {
+                return ExitCode::from(2);
+            }
+            if let Some(e) = err.downcast_ref::<DiffFilterError>() {
+                return ExitCode::from(e.exit_code() as u8);
+            }
             ExitCode::from(1)
         }
     }
 }
 
 fn main() -> ExitCode {
-    let args = Args::parse_from(strip_subcommand(std::env::args().collect()));
+    let mut argv = strip_subcommand(std::env::args().collect());
+    if argv.get(1).map(String::as_str) == Some("merge") {
+        argv.remove(1);
+        let args = MergeArgs::parse_from(argv);
+        return finish(merge::merge(
+            &args.parts,
+            args.output.as_std_path(),
+            args.json,
+        ));
+    }
+    let args = Args::parse_from(argv);
     if args.list || args.build_only {
         return match run_list_or_build(&args) {
             Ok(out) => {
@@ -653,8 +748,9 @@ mod tests {
     #[test]
     fn rejects_out_of_scope_options() {
         for opt in [
-            "--in-diff=x",
-            "--shard=1/2",
+            "--shard=2/2",
+            "--shard=1",
+            "--shard=a/2",
             "--html=x",
             "-j0",
             "--timeout=0",

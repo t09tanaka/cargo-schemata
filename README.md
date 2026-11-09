@@ -2,7 +2,7 @@
 
 Mutation testing for Rust that builds mutants once, as schemata.
 
-**Status: under development.** Listing the mutants (`--list`), building them (`--build-only`) and running the tests on them (a plain `cargo schemata`) work. Not yet: `--in-diff`, `--shard`, `--html`, and results reused from an earlier run.
+**Status: under development.** Listing the mutants (`--list`), building them (`--build-only`) and running the tests on them (a plain `cargo schemata`) work. Also there: `--in-diff` (only the code a diff changes), and `--shard` with `merge` (a run in several parts). Not yet: `--html`, and results reused from an earlier run.
 
 ## Goal
 
@@ -18,6 +18,7 @@ mutation at runtime.
 cargo schemata [options] [-- <cargo test args> [-- <test binary args>]]
 cargo schemata --list [--json] [options]
 cargo schemata --build-only [--json] [options] [-- <cargo test args>]
+cargo schemata merge <part.json>... [--output <dir>] [--json]
 cargo schemata --version | --help
 ```
 
@@ -51,6 +52,8 @@ static initializers are listed like any other code.
 | `-e`, `--exclude <glob>`     | Leave out files matching a glob; applied after `--file`                                  |
 | `-F`, `--re <regex>`         | Examine only mutants whose name (as listed, with line and column) matches                |
 | `-E`, `--exclude-re <regex>` | Leave out mutants whose name matches                                                     |
+| `-D`, `--in-diff <file>`     | Only mutants on lines that the diff adds or changes (`-` reads standard input), see [Only the code a diff changes](#only-the-code-a-diff-changes---in-diff) |
+| `--shard <k>/<n>`            | Run part `k` of `n` (`k` from 0) of the mutants; the report is then a part, see [A run in several parts](#a-run-in-several-parts---shard-and-merge) |
 | `-d`, `--dir <dir>`          | The crate or workspace directory. Default: `.`                                           |
 | `--manifest-path <file>`     | The `Cargo.toml` of the package, instead of `--dir`                                      |
 | `-p`, `--package <name>`     | Mutate only this package; may be repeated                                                |
@@ -61,12 +64,110 @@ static initializers are listed like any other code.
 | `--config <file>`, `--no-config` | Read another configuration file, or none                                             |
 | `-- <cargo test args>`       | Which tests are built and run, as for `cargo test` (`--lib`, `--test it`, `--features x`). A second `--` starts the arguments of the test binaries (`--test-threads 1`). A bare word is a test name filter for the binaries. Ignored by `--list` |
 
-`.cargo/mutants.toml` is read like cargo-mutants does: `examine_globs`,
-`exclude_globs`, `examine_re`, `exclude_re`, `skip_calls`,
-`skip_calls_defaults` and `error_values` are added to the command line (lists
-are joined, the command line first). Other keys are ignored.
+### `.cargo/mutants.toml`
+
+The file is read like cargo-mutants does, and one file can serve both tools:
+
+| Key                                                                                    | In cargo-schemata                                                                  |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `examine_globs`, `exclude_globs`, `examine_re`, `exclude_re`, `skip_calls`, `skip_calls_defaults`, `error_values` | Used: added to the command line (lists are joined, the command line first) |
+| `additional_cargo_args`, `additional_cargo_test_args`, `all_features`, `build_timeout_multiplier`, `cap_lints`, `copy_vcs`, `copy_target`, `gitignore`, `features`, `minimum_test_timeout`, `no_default_features`, `output`, `profile`, `test_package`, `test_workspace`, `timeout_multiplier`, `test_tool`, `sharding` | Known to cargo-mutants 27.1.0 but not used: accepted, with a warning on stderr (`cargo schemata: warning: <file>: `timeout_multiplier` is not used by cargo-schemata`). Pass cargo arguments after `--`, and use `-j` and `--timeout` |
+| any other key                                                                          | Refused, as cargo-mutants does: exit code 2, and the message names the key         |
+
+A misspelt key that was ignored would be a configuration that says less than was meant.
 
 See [Running the tests](#running-the-tests) for what a run prints and its exit codes.
+
+### Only the code a diff changes (`--in-diff`)
+
+`--in-diff <file>` takes a unified diff (what `git diff` prints; `-` reads it from standard input) and keeps the mutants whose span has a line that the diff adds or changes, or that is next to a line it deletes. Context lines do not count, and changes to files that are not Rust source are ignored. It works with `--list`, a run and `--build-only`, and comes before `--shard`.
+
+```bash
+git diff origin/main... > pr.diff
+cargo schemata --list --in-diff pr.diff     # which mutants the change has
+cargo schemata --in-diff pr.diff            # test only those
+git diff origin/main... | cargo schemata --in-diff -
+```
+
+The file names in the diff are matched with the paths of the mutants, relative to the workspace root (`src/lib.rs`, a `b/` prefix is removed), so run `git diff` at the root of the workspace. The new side of the diff has to be what the tree has: a diff that is out of date is refused. This follows `cargo mutants --in-diff` (27.1.0), which the tests compare with.
+
+| Diff                                                              | Result                                        |
+| ----------------------------------------------------------------- | --------------------------------------------- |
+| empty, changes no Rust file, or touches no mutant                 | Nothing to test. `--list` prints nothing; a run writes a report without mutants. Exit code 0 |
+| its new side differs from the source files of the tree            | Refused, naming the first line. Exit code 5   |
+| cannot be read or parsed                                          | Refused. Exit code 6                          |
+
+### A run in several parts (`--shard` and `merge`)
+
+`--shard <k>/<n>` runs part `k` of `n` (`k` from 0) of the mutants, so that `n` machines can each take one. The mutants are divided as `cargo mutants --shard` does by default: after `--in-diff` and the other filters, consecutive ranges of the list, the first `ceil(total / n)` mutants to part 0 and so on (the last parts may be empty). Every part builds all the mutants it has to run and runs the tests without a mutant first, so a part costs a baseline and a build; what is divided is the test runs on the mutants.
+
+**The report of a part is not a result.** It lists every mutant of the run, and the mutants of the other parts have the status `Pending`. `config.shard` says which part it is (`index`, `count`, and the `order` of all mutants, which `merge` needs). A tool that judges a report must not pass a `Pending` mutant. The `*.txt` lists have the part's own mutants, the exit code is about them alone, and the last line says `shard k/n: 12 of 40 mutants`.
+
+```bash
+cargo schemata --shard 0/3 -o parts/0
+cargo schemata --shard 1/3 -o parts/1
+cargo schemata --shard 2/3 -o parts/2
+cargo schemata merge parts/0/report.json parts/1/report.json parts/2/report.json -o schemata.out
+```
+
+`cargo schemata merge <part.json>... [-o <dir>] [--json]` reads the reports of all `n` parts of one run and writes what the run would have written without `--shard`: the same `report.json` (without `config`) and `caught.txt`, `missed.txt`, `timeout.txt` and `unviable.txt` (`duration` as each part measured it). It prints the counts and the missed mutants, and the exit code is 0 when no mutant was missed and 1 when one was. It runs nothing and needs no package. The order of the parts on the command line does not matter.
+
+**It refuses parts that are not all the parts of one run**: exit code 1 and nothing written (the five output files of the last run are removed first, so that nothing old can be read as the result). That is: a file that is not the report of a part, a part that is missing or given twice, parts that were divided differently (`n`), parts whose mutants differ (another source tree, another set of options), and a part that evaluated a mutant of another part.
+
+```
+$ cargo schemata merge parts/0/report.json
+cargo schemata merge: the parts are not the parts of one run
+  - shard 1/3 is missing
+  - shard 2/3 is missing
+cargo schemata merge: FAILED (nothing was merged)
+```
+
+Use the same options for every part (`--in-diff`, `-f`, `-F`, `-p`, the configuration file) and the same source tree.
+
+#### In CI: one job per part
+
+A GitHub Actions workflow that runs four parts side by side and merges them (`--in-diff` is left out; add it for the mutants of a pull request: `git diff origin/main... > pr.diff` in each job):
+
+```yaml
+name: mutation
+on: pull_request
+jobs:
+  mutants:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # a part that finds a survivor must not stop the others
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-schemata --locked
+      - run: cargo schemata --shard ${{ matrix.shard }}/4 -o parts/${{ matrix.shard }}
+        continue-on-error: true # the verdict is the merge's; the report is what is needed
+      - uses: actions/upload-artifact@v4
+        with:
+          name: part-${{ matrix.shard }}
+          path: parts/${{ matrix.shard }}/report.json
+          if-no-files-found: error
+  merge:
+    needs: mutants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-schemata --locked
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: part-*
+          path: parts
+      - run: cargo schemata merge parts/*/report.json -o schemata.out # fails if a mutant was missed, or a part is missing
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: schemata.out
+          path: schemata.out
+```
+
+A part that was killed or did not finish writes no report; `if-no-files-found: error` and `merge` (which lists the missing part) then fail the workflow.
 
 ### What each mutant carries
 
@@ -85,6 +186,19 @@ at a time.
 `cargo mutants --list` printed for them (`tests/fixtures/cases.json` lists the
 invocations), and `cargo test` checks that `cargo schemata --list` prints the
 same.
+
+To rebuild the expected files (a new case in `cases.json`, or another version of
+cargo-mutants), install the version the tests compare with and run the script from
+the root of this repository, then commit what changed:
+
+```bash
+cargo install cargo-mutants --version 27.1.0 --locked
+python3 scripts/gen-expected.py
+```
+
+`--in-diff` cases use the diff files in `tests/fixtures/diffs` (`@fixtures@` in a case
+stands for their directory). `cargo test` also runs a fixture crate on all its parts and
+merges them (`tests/shard_merge.rs`), which takes a few minutes the first time.
 
 ## License
 
@@ -163,8 +277,10 @@ cargo schemata: FAILED (17 caught, 4 missed, 1 timeout, 2 unviable in 13.1s)
 | Exit code | Meaning                                                                                  |
 | --------- | ---------------------------------------------------------------------------------------- |
 | 0         | No mutant was missed (`cargo schemata: OK (...)`)                                        |
-| 1         | A mutant was missed, the tests fail without a mutant, something could not be built or run, or another run is at work in the package |
-| 2         | Wrong usage: an unknown option, `--jobs 0`, a `--timeout` that is not positive, options this version does not have (`--in-diff`, `--shard`, `--html`) |
+| 1         | A mutant was missed, the tests fail without a mutant, something could not be built or run, or another run is at work in the package. For `merge`: a mutant was missed, or the parts are not all the parts of one run |
+| 2         | Wrong usage: an unknown option, `--jobs 0`, a `--timeout` that is not positive, a `--shard` that is not `k/n` with `k < n`, an unknown key in `.cargo/mutants.toml`, options this version does not have (`--html`) |
+| 5         | `--in-diff`: the diff is out of date with the source tree (the exit code of cargo-mutants) |
+| 6         | `--in-diff`: the diff cannot be read or parsed                                           |
 | 130 / 143 | Interrupted (SIGINT / SIGTERM). The test processes were killed first, and no report was written |
 
 **There is no score threshold.** The exit code depends on the missed mutants alone.
@@ -270,6 +386,6 @@ killed leaves no stale lock.
 ### Differences from cargo-mutants
 
 Doctests are not run (only the test binaries `cargo test --no-run` builds).
-`--in-diff`, `--shard`, `--html` and reuse of earlier results are not there. The
+`--html` and reuse of earlier results are not there. `--sharding` (and the `sharding` key) is not either: the division is always the `slice` of cargo-mutants, its default. The
 test processes of the mutants that are built in share one working directory
 (see `-j`).

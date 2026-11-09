@@ -1,0 +1,4 @@
+beta/src/lib.rs:2:5: replace beta -> bool with true
+beta/src/lib.rs:2:5: replace beta -> bool with false
+beta/src/lib.rs:2:7: replace > with == in beta
+beta/src/lib.rs:2:7: replace > with < in beta

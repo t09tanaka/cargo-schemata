@@ -247,3 +247,23 @@ fn name_filters_and_skips_are_applied_when_routing() {
         }
     }
 }
+
+#[test]
+fn routing_works_on_a_part_of_the_mutants() {
+    let kit = Kit::new("shard");
+    // the second half of the mutants: `threaded_sum` and what follows
+    let (out, routed) = kit.run("r", &["--shard", "1/2", "--", "--lib"]);
+    let (_, full) = kit.run("f", &["--shard", "1/2", "--no-routing", "--", "--lib"]);
+    let stdout = text(&out.stdout);
+    assert_eq!(routed.statuses(), full.statuses(), "{stdout}");
+    let e = routed.entries();
+    assert_eq!(find(&e, "replace add -> u32 with 0").status, "Pending");
+    assert_eq!(find(&e, "replace gate -> bool with false").status, "Killed");
+    assert_eq!(
+        find(&e, "replace never_called -> u32 with 0")
+            .reason
+            .as_deref(),
+        Some("not reached by any test")
+    );
+    assert!(stdout.contains("traced: "), "{stdout}");
+}

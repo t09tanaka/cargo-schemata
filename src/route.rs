@@ -367,11 +367,9 @@ mod tests {
         assert!(changes_output(&v(&["--format", "terse"])));
         assert!(changes_output(&v(&["--format=json"])));
         assert!(changes_output(&v(&["-q"])));
-        assert!(!changes_output(&v(&[
-            "--test-threads=1",
-            "--nocapture",
-            "x"
-        ])));
+        assert!(changes_output(&v(&["--nocapture"])));
+        assert!(changes_output(&v(&["--show-output"])));
+        assert!(!changes_output(&v(&["--test-threads=1", "--ignored", "x"])));
     }
 
     #[test]

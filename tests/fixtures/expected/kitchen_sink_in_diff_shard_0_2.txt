@@ -1,0 +1,6 @@
+src/lib.rs:30:5: replace returns_bool -> bool with false
+src/ops.rs:4:5: replace add -> u32 with 0
+src/ops.rs:4:5: replace add -> u32 with 1
+src/ops.rs:4:7: replace + with - in add
+src/ops.rs:4:7: replace + with * in add
+src/ops.rs:21:9: replace Counter::is_zero -> bool with true

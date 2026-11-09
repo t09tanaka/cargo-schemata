@@ -107,15 +107,25 @@ pub fn clear_output(dir: &Path) -> Result<()> {
 }
 
 /// The report, in the mutation-testing-elements schema, version 2.
+///
+/// For one part of a divided run (`shard` is `(k, n)`), `mutants` is the whole
+/// list: the ones of the other parts have no result and are `Pending`, and
+/// `config.shard` says which part this is and the order of the whole list, which
+/// `merge` needs. Without `shard`, a mutant without a result is left out.
 pub fn report_json(
     mutants: &[Mutant],
     results: &[MutantResult],
     timeout: Option<Duration>,
+    shard: Option<(usize, usize)>,
 ) -> Value {
+    let mut order: Vec<String> = Vec::new();
     let by_id: BTreeMap<usize, &MutantResult> = results.iter().map(|r| (r.id, r)).collect();
     let mut files: BTreeMap<String, (String, Vec<Value>)> = BTreeMap::new();
     for m in mutants {
-        let Some(r) = by_id.get(&m.id) else { continue };
+        let r = by_id.get(&m.id);
+        if r.is_none() && shard.is_none() {
+            continue;
+        }
         let path = m.file_slashes();
         let entry = files
             .entry(path.clone())
@@ -129,14 +139,19 @@ pub fn report_json(
                 "start": {"line": m.span.start.line, "column": m.span.start.column},
                 "end": {"line": m.span.end.line, "column": m.span.end.column},
             },
-            "status": r.status.element(),
-            "duration": r.duration.as_millis() as u64,
+            "status": r.map_or("Pending", |r| r.status.element()),
+            "duration": r.map_or(0, |r| r.duration.as_millis() as u64),
         });
-        let reason = match r.status {
-            Status::Unviable | Status::Missed => r.reason.clone(),
-            Status::Timeout => timeout.map(|t| format!("did not end within {}s", t.as_secs())),
+        let reason = match r {
+            Some(r) if r.status == Status::Unviable || r.status == Status::Missed => {
+                r.reason.clone()
+            }
+            Some(r) if r.status == Status::Timeout => {
+                timeout.map(|t| format!("did not end within {}s", t.as_secs()))
+            }
             _ => None,
         };
+        order.push(v["id"].as_str().unwrap_or_default().to_owned());
         if let Some(reason) = reason {
             v["statusReason"] = Value::String(reason);
         }
@@ -151,12 +166,16 @@ pub fn report_json(
             )
         })
         .collect();
-    json!({
+    let mut report = json!({
         "schemaVersion": "2",
         "thresholds": {"high": 100, "low": 100},
         "framework": {"name": "cargo-schemata", "version": env!("CARGO_PKG_VERSION")},
         "files": files,
-    })
+    });
+    if let Some((k, n)) = shard {
+        report["config"] = json!({"shard": {"index": k, "count": n, "order": order}});
+    }
+    report
 }
 
 /// One list of names per status, like the files cargo-mutants writes.
