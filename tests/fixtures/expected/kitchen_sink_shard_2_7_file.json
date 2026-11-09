@@ -1,0 +1,1538 @@
+[
+  {
+    "diff": "--- src/lib.rs\n+++ replace * with + in nested_functions::inner\n@@ -208,17 +208,17 @@\n \n pub fn unicode_before_operator(a: u32) -> String {\n     let arrow = \"é→é\";\n     format!(\"{arrow}{}\", a + 1)\n }\n \n pub fn nested_functions(a: u32) -> u32 {\n     fn inner(b: u32) -> u32 {\n-        b * 3\n+        b + /* ~ changed by cargo-mutants ~ */ 3\n     }\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n         && b < 2\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "nested_functions::inner",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 217
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:216:11: replace * with + in nested_functions::inner",
+    "package": "kitchen-sink",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 12,
+        "line": 216
+      },
+      "start": {
+        "column": 11,
+        "line": 216
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace * with / in nested_functions::inner\n@@ -208,17 +208,17 @@\n \n pub fn unicode_before_operator(a: u32) -> String {\n     let arrow = \"é→é\";\n     format!(\"{arrow}{}\", a + 1)\n }\n \n pub fn nested_functions(a: u32) -> u32 {\n     fn inner(b: u32) -> u32 {\n-        b * 3\n+        b / /* ~ changed by cargo-mutants ~ */ 3\n     }\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n         && b < 2\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "nested_functions::inner",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 217
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:216:11: replace * with / in nested_functions::inner",
+    "package": "kitchen-sink",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 12,
+        "line": 216
+      },
+      "start": {
+        "column": 11,
+        "line": 216
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace - with + in nested_functions\n@@ -210,17 +210,17 @@\n     let arrow = \"é→é\";\n     format!(\"{arrow}{}\", a + 1)\n }\n \n pub fn nested_functions(a: u32) -> u32 {\n     fn inner(b: u32) -> u32 {\n         b * 3\n     }\n-    let closure = |c: u32| c - 1;\n+    let closure = |c: u32| c + /* ~ changed by cargo-mutants ~ */ 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n         && b < 2\n         || a\n             == b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "nested_functions",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 220
+        },
+        "start": {
+          "column": 1,
+          "line": 214
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:218:30: replace - with + in nested_functions",
+    "package": "kitchen-sink",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 31,
+        "line": 218
+      },
+      "start": {
+        "column": 30,
+        "line": 218
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace - with / in nested_functions\n@@ -210,17 +210,17 @@\n     let arrow = \"é→é\";\n     format!(\"{arrow}{}\", a + 1)\n }\n \n pub fn nested_functions(a: u32) -> u32 {\n     fn inner(b: u32) -> u32 {\n         b * 3\n     }\n-    let closure = |c: u32| c - 1;\n+    let closure = |c: u32| c / /* ~ changed by cargo-mutants ~ */ 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n         && b < 2\n         || a\n             == b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "nested_functions",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 220
+        },
+        "start": {
+          "column": 1,
+          "line": 214
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:218:30: replace - with / in nested_functions",
+    "package": "kitchen-sink",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 31,
+        "line": 218
+      },
+      "start": {
+        "column": 30,
+        "line": 218
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace + with - in nested_functions\n@@ -211,17 +211,17 @@\n     format!(\"{arrow}{}\", a + 1)\n }\n \n pub fn nested_functions(a: u32) -> u32 {\n     fn inner(b: u32) -> u32 {\n         b * 3\n     }\n     let closure = |c: u32| c - 1;\n-    inner(a) + closure(a)\n+    inner(a) - /* ~ changed by cargo-mutants ~ */ closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n         && b < 2\n         || a\n             == b\n }\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "nested_functions",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 220
+        },
+        "start": {
+          "column": 1,
+          "line": 214
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:219:14: replace + with - in nested_functions",
+    "package": "kitchen-sink",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 219
+      },
+      "start": {
+        "column": 14,
+        "line": 219
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace + with * in nested_functions\n@@ -211,17 +211,17 @@\n     format!(\"{arrow}{}\", a + 1)\n }\n \n pub fn nested_functions(a: u32) -> u32 {\n     fn inner(b: u32) -> u32 {\n         b * 3\n     }\n     let closure = |c: u32| c - 1;\n-    inner(a) + closure(a)\n+    inner(a) * /* ~ changed by cargo-mutants ~ */ closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n         && b < 2\n         || a\n             == b\n }\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "nested_functions",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 220
+        },
+        "start": {
+          "column": 1,
+          "line": 214
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:219:14: replace + with * in nested_functions",
+    "package": "kitchen-sink",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 219
+      },
+      "start": {
+        "column": 14,
+        "line": 219
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace multi_line_expression -> bool with true\n@@ -215,20 +215,17 @@\n     fn inner(b: u32) -> u32 {\n         b * 3\n     }\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n-    a > 1\n-        && b < 2\n-        || a\n-            == b\n+    true /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n     a /= b;\n     a %= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "multi_line_expression",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 227
+        },
+        "start": {
+          "column": 1,
+          "line": 222
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:223:5: replace multi_line_expression -> bool with true",
+    "package": "kitchen-sink",
+    "replacement": "true",
+    "span": {
+      "end": {
+        "column": 17,
+        "line": 226
+      },
+      "start": {
+        "column": 5,
+        "line": 223
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace multi_line_expression -> bool with false\n@@ -215,20 +215,17 @@\n     fn inner(b: u32) -> u32 {\n         b * 3\n     }\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n-    a > 1\n-        && b < 2\n-        || a\n-            == b\n+    false /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n     a /= b;\n     a %= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "multi_line_expression",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 227
+        },
+        "start": {
+          "column": 1,
+          "line": 222
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:223:5: replace multi_line_expression -> bool with false",
+    "package": "kitchen-sink",
+    "replacement": "false",
+    "span": {
+      "end": {
+        "column": 17,
+        "line": 226
+      },
+      "start": {
+        "column": 5,
+        "line": 223
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace || with && in multi_line_expression\n@@ -217,17 +217,17 @@\n     }\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n         && b < 2\n-        || a\n+        && /* ~ changed by cargo-mutants ~ */ a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n     a /= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "multi_line_expression",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 227
+        },
+        "start": {
+          "column": 1,
+          "line": 222
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:225:9: replace || with && in multi_line_expression",
+    "package": "kitchen-sink",
+    "replacement": "&&",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 225
+      },
+      "start": {
+        "column": 9,
+        "line": 225
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace && with || in multi_line_expression\n@@ -216,17 +216,17 @@\n         b * 3\n     }\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n-        && b < 2\n+        || /* ~ changed by cargo-mutants ~ */ b < 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "multi_line_expression",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 227
+        },
+        "start": {
+          "column": 1,
+          "line": 222
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:224:9: replace && with || in multi_line_expression",
+    "package": "kitchen-sink",
+    "replacement": "||",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 224
+      },
+      "start": {
+        "column": 9,
+        "line": 224
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace > with == in multi_line_expression\n@@ -215,17 +215,17 @@\n     fn inner(b: u32) -> u32 {\n         b * 3\n     }\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n-    a > 1\n+    a == /* ~ changed by cargo-mutants ~ */ 1\n         && b < 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "multi_line_expression",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 227
+        },
+        "start": {
+          "column": 1,
+          "line": 222
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:223:7: replace > with == in multi_line_expression",
+    "package": "kitchen-sink",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 223
+      },
+      "start": {
+        "column": 7,
+        "line": 223
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace > with < in multi_line_expression\n@@ -215,17 +215,17 @@\n     fn inner(b: u32) -> u32 {\n         b * 3\n     }\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n-    a > 1\n+    a < /* ~ changed by cargo-mutants ~ */ 1\n         && b < 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "multi_line_expression",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 227
+        },
+        "start": {
+          "column": 1,
+          "line": 222
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:223:7: replace > with < in multi_line_expression",
+    "package": "kitchen-sink",
+    "replacement": "<",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 223
+      },
+      "start": {
+        "column": 7,
+        "line": 223
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace > with >= in multi_line_expression\n@@ -215,17 +215,17 @@\n     fn inner(b: u32) -> u32 {\n         b * 3\n     }\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n-    a > 1\n+    a >= /* ~ changed by cargo-mutants ~ */ 1\n         && b < 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "multi_line_expression",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 227
+        },
+        "start": {
+          "column": 1,
+          "line": 222
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:223:7: replace > with >= in multi_line_expression",
+    "package": "kitchen-sink",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 223
+      },
+      "start": {
+        "column": 7,
+        "line": 223
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace < with == in multi_line_expression\n@@ -216,17 +216,17 @@\n         b * 3\n     }\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n-        && b < 2\n+        && b == /* ~ changed by cargo-mutants ~ */ 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "multi_line_expression",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 227
+        },
+        "start": {
+          "column": 1,
+          "line": 222
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:224:14: replace < with == in multi_line_expression",
+    "package": "kitchen-sink",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 224
+      },
+      "start": {
+        "column": 14,
+        "line": 224
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace < with > in multi_line_expression\n@@ -216,17 +216,17 @@\n         b * 3\n     }\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n-        && b < 2\n+        && b > /* ~ changed by cargo-mutants ~ */ 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "multi_line_expression",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 227
+        },
+        "start": {
+          "column": 1,
+          "line": 222
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:224:14: replace < with > in multi_line_expression",
+    "package": "kitchen-sink",
+    "replacement": ">",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 224
+      },
+      "start": {
+        "column": 14,
+        "line": 224
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace < with <= in multi_line_expression\n@@ -216,17 +216,17 @@\n         b * 3\n     }\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n-        && b < 2\n+        && b <= /* ~ changed by cargo-mutants ~ */ 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "multi_line_expression",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 227
+        },
+        "start": {
+          "column": 1,
+          "line": 222
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:224:14: replace < with <= in multi_line_expression",
+    "package": "kitchen-sink",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 224
+      },
+      "start": {
+        "column": 14,
+        "line": 224
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace == with != in multi_line_expression\n@@ -218,17 +218,17 @@\n     let closure = |c: u32| c - 1;\n     inner(a) + closure(a)\n }\n \n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n         && b < 2\n         || a\n-            == b\n+            != /* ~ changed by cargo-mutants ~ */ b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n     a /= b;\n     a %= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "multi_line_expression",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 227
+        },
+        "start": {
+          "column": 1,
+          "line": 222
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:226:13: replace == with != in multi_line_expression",
+    "package": "kitchen-sink",
+    "replacement": "!=",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 226
+      },
+      "start": {
+        "column": 13,
+        "line": 226
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace assignments -> u32 with 0\n@@ -222,27 +222,17 @@\n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n         && b < 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n-    a += b;\n-    a -= b;\n-    a *= b;\n-    a /= b;\n-    a %= b;\n-    a <<= 1;\n-    a >>= 1;\n-    a &= b;\n-    a |= b;\n-    a ^= b;\n-    a\n+    0 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n     (a + b) - (a * b) / (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:230:5: replace assignments -> u32 with 0",
+    "package": "kitchen-sink",
+    "replacement": "0",
+    "span": {
+      "end": {
+        "column": 6,
+        "line": 240
+      },
+      "start": {
+        "column": 5,
+        "line": 230
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace assignments -> u32 with 1\n@@ -222,27 +222,17 @@\n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n         && b < 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n-    a += b;\n-    a -= b;\n-    a *= b;\n-    a /= b;\n-    a %= b;\n-    a <<= 1;\n-    a >>= 1;\n-    a &= b;\n-    a |= b;\n-    a ^= b;\n-    a\n+    1 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n     (a + b) - (a * b) / (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:230:5: replace assignments -> u32 with 1",
+    "package": "kitchen-sink",
+    "replacement": "1",
+    "span": {
+      "end": {
+        "column": 6,
+        "line": 240
+      },
+      "start": {
+        "column": 5,
+        "line": 230
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace += with -= in assignments\n@@ -222,17 +222,17 @@\n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n         && b < 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n-    a += b;\n+    a -= /* ~ changed by cargo-mutants ~ */ b;\n     a -= b;\n     a *= b;\n     a /= b;\n     a %= b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:230:7: replace += with -= in assignments",
+    "package": "kitchen-sink",
+    "replacement": "-=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 230
+      },
+      "start": {
+        "column": 7,
+        "line": 230
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace += with *= in assignments\n@@ -222,17 +222,17 @@\n pub fn multi_line_expression(a: u32, b: u32) -> bool {\n     a > 1\n         && b < 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n-    a += b;\n+    a *= /* ~ changed by cargo-mutants ~ */ b;\n     a -= b;\n     a *= b;\n     a /= b;\n     a %= b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:230:7: replace += with *= in assignments",
+    "package": "kitchen-sink",
+    "replacement": "*=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 230
+      },
+      "start": {
+        "column": 7,
+        "line": 230
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace -= with += in assignments\n@@ -223,17 +223,17 @@\n     a > 1\n         && b < 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n-    a -= b;\n+    a += /* ~ changed by cargo-mutants ~ */ b;\n     a *= b;\n     a /= b;\n     a %= b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:231:7: replace -= with += in assignments",
+    "package": "kitchen-sink",
+    "replacement": "+=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 231
+      },
+      "start": {
+        "column": 7,
+        "line": 231
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace -= with /= in assignments\n@@ -223,17 +223,17 @@\n     a > 1\n         && b < 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n-    a -= b;\n+    a /= /* ~ changed by cargo-mutants ~ */ b;\n     a *= b;\n     a /= b;\n     a %= b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:231:7: replace -= with /= in assignments",
+    "package": "kitchen-sink",
+    "replacement": "/=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 231
+      },
+      "start": {
+        "column": 7,
+        "line": 231
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace *= with += in assignments\n@@ -224,17 +224,17 @@\n         && b < 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n-    a *= b;\n+    a += /* ~ changed by cargo-mutants ~ */ b;\n     a /= b;\n     a %= b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:232:7: replace *= with += in assignments",
+    "package": "kitchen-sink",
+    "replacement": "+=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 232
+      },
+      "start": {
+        "column": 7,
+        "line": 232
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace *= with /= in assignments\n@@ -224,17 +224,17 @@\n         && b < 2\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n-    a *= b;\n+    a /= /* ~ changed by cargo-mutants ~ */ b;\n     a /= b;\n     a %= b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:232:7: replace *= with /= in assignments",
+    "package": "kitchen-sink",
+    "replacement": "/=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 232
+      },
+      "start": {
+        "column": 7,
+        "line": 232
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace /= with %= in assignments\n@@ -225,17 +225,17 @@\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n-    a /= b;\n+    a %= /* ~ changed by cargo-mutants ~ */ b;\n     a %= b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:233:7: replace /= with %= in assignments",
+    "package": "kitchen-sink",
+    "replacement": "%=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 233
+      },
+      "start": {
+        "column": 7,
+        "line": 233
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace /= with *= in assignments\n@@ -225,17 +225,17 @@\n         || a\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n-    a /= b;\n+    a *= /* ~ changed by cargo-mutants ~ */ b;\n     a %= b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:233:7: replace /= with *= in assignments",
+    "package": "kitchen-sink",
+    "replacement": "*=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 233
+      },
+      "start": {
+        "column": 7,
+        "line": 233
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace %= with /= in assignments\n@@ -226,17 +226,17 @@\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n     a /= b;\n-    a %= b;\n+    a /= /* ~ changed by cargo-mutants ~ */ b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:234:7: replace %= with /= in assignments",
+    "package": "kitchen-sink",
+    "replacement": "/=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 234
+      },
+      "start": {
+        "column": 7,
+        "line": 234
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace %= with += in assignments\n@@ -226,17 +226,17 @@\n             == b\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n     a /= b;\n-    a %= b;\n+    a += /* ~ changed by cargo-mutants ~ */ b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:234:7: replace %= with += in assignments",
+    "package": "kitchen-sink",
+    "replacement": "+=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 234
+      },
+      "start": {
+        "column": 7,
+        "line": 234
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace <<= with >>= in assignments\n@@ -227,17 +227,17 @@\n }\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n     a /= b;\n     a %= b;\n-    a <<= 1;\n+    a >>= /* ~ changed by cargo-mutants ~ */ 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:235:7: replace <<= with >>= in assignments",
+    "package": "kitchen-sink",
+    "replacement": ">>=",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 235
+      },
+      "start": {
+        "column": 7,
+        "line": 235
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace >>= with <<= in assignments\n@@ -228,17 +228,17 @@\n \n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n     a /= b;\n     a %= b;\n     a <<= 1;\n-    a >>= 1;\n+    a <<= /* ~ changed by cargo-mutants ~ */ 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n     (a + b) - (a * b) / (a % b)\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:236:7: replace >>= with <<= in assignments",
+    "package": "kitchen-sink",
+    "replacement": "<<=",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 236
+      },
+      "start": {
+        "column": 7,
+        "line": 236
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace &= with |= in assignments\n@@ -229,17 +229,17 @@\n pub fn assignments(mut a: u32, b: u32) -> u32 {\n     a += b;\n     a -= b;\n     a *= b;\n     a /= b;\n     a %= b;\n     a <<= 1;\n     a >>= 1;\n-    a &= b;\n+    a |= /* ~ changed by cargo-mutants ~ */ b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n     (a + b) - (a * b) / (a % b)\n }\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:237:7: replace &= with |= in assignments",
+    "package": "kitchen-sink",
+    "replacement": "|=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 237
+      },
+      "start": {
+        "column": 7,
+        "line": 237
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace |= with &= in assignments\n@@ -230,17 +230,17 @@\n     a += b;\n     a -= b;\n     a *= b;\n     a /= b;\n     a %= b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n-    a |= b;\n+    a &= /* ~ changed by cargo-mutants ~ */ b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n     (a + b) - (a * b) / (a % b)\n }\n \n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:238:7: replace |= with &= in assignments",
+    "package": "kitchen-sink",
+    "replacement": "&=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 238
+      },
+      "start": {
+        "column": 7,
+        "line": 238
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace ^= with |= in assignments\n@@ -231,17 +231,17 @@\n     a -= b;\n     a *= b;\n     a /= b;\n     a %= b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n-    a ^= b;\n+    a |= /* ~ changed by cargo-mutants ~ */ b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n     (a + b) - (a * b) / (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:239:7: replace ^= with |= in assignments",
+    "package": "kitchen-sink",
+    "replacement": "|=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 239
+      },
+      "start": {
+        "column": 7,
+        "line": 239
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace ^= with &= in assignments\n@@ -231,17 +231,17 @@\n     a -= b;\n     a *= b;\n     a /= b;\n     a %= b;\n     a <<= 1;\n     a >>= 1;\n     a &= b;\n     a |= b;\n-    a ^= b;\n+    a &= /* ~ changed by cargo-mutants ~ */ b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n     (a + b) - (a * b) / (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "assignments",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 241
+        },
+        "start": {
+          "column": 1,
+          "line": 229
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:239:7: replace ^= with &= in assignments",
+    "package": "kitchen-sink",
+    "replacement": "&=",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 239
+      },
+      "start": {
+        "column": 7,
+        "line": 239
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace arithmetic -> u32 with 0\n@@ -236,17 +236,17 @@\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n-    (a + b) - (a * b) / (a % b)\n+    0 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "arithmetic",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 245
+        },
+        "start": {
+          "column": 1,
+          "line": 243
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:244:5: replace arithmetic -> u32 with 0",
+    "package": "kitchen-sink",
+    "replacement": "0",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 244
+      },
+      "start": {
+        "column": 5,
+        "line": 244
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace arithmetic -> u32 with 1\n@@ -236,17 +236,17 @@\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n-    (a + b) - (a * b) / (a % b)\n+    1 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "arithmetic",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 245
+        },
+        "start": {
+          "column": 1,
+          "line": 243
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:244:5: replace arithmetic -> u32 with 1",
+    "package": "kitchen-sink",
+    "replacement": "1",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 244
+      },
+      "start": {
+        "column": 5,
+        "line": 244
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace - with + in arithmetic\n@@ -236,17 +236,17 @@\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n-    (a + b) - (a * b) / (a % b)\n+    (a + b) + /* ~ changed by cargo-mutants ~ */ (a * b) / (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "arithmetic",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 245
+        },
+        "start": {
+          "column": 1,
+          "line": 243
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:244:13: replace - with + in arithmetic",
+    "package": "kitchen-sink",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 14,
+        "line": 244
+      },
+      "start": {
+        "column": 13,
+        "line": 244
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace - with / in arithmetic\n@@ -236,17 +236,17 @@\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n-    (a + b) - (a * b) / (a % b)\n+    (a + b) / /* ~ changed by cargo-mutants ~ */ (a * b) / (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "arithmetic",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 245
+        },
+        "start": {
+          "column": 1,
+          "line": 243
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:244:13: replace - with / in arithmetic",
+    "package": "kitchen-sink",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 14,
+        "line": 244
+      },
+      "start": {
+        "column": 13,
+        "line": 244
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace + with - in arithmetic\n@@ -236,17 +236,17 @@\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n-    (a + b) - (a * b) / (a % b)\n+    (a - /* ~ changed by cargo-mutants ~ */ b) - (a * b) / (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "arithmetic",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 245
+        },
+        "start": {
+          "column": 1,
+          "line": 243
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:244:8: replace + with - in arithmetic",
+    "package": "kitchen-sink",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 244
+      },
+      "start": {
+        "column": 8,
+        "line": 244
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace + with * in arithmetic\n@@ -236,17 +236,17 @@\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n-    (a + b) - (a * b) / (a % b)\n+    (a * /* ~ changed by cargo-mutants ~ */ b) - (a * b) / (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "arithmetic",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 245
+        },
+        "start": {
+          "column": 1,
+          "line": 243
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:244:8: replace + with * in arithmetic",
+    "package": "kitchen-sink",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 244
+      },
+      "start": {
+        "column": 8,
+        "line": 244
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace / with % in arithmetic\n@@ -236,17 +236,17 @@\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n-    (a + b) - (a * b) / (a % b)\n+    (a + b) - (a * b) % /* ~ changed by cargo-mutants ~ */ (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "arithmetic",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 245
+        },
+        "start": {
+          "column": 1,
+          "line": 243
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:244:23: replace / with % in arithmetic",
+    "package": "kitchen-sink",
+    "replacement": "%",
+    "span": {
+      "end": {
+        "column": 24,
+        "line": 244
+      },
+      "start": {
+        "column": 23,
+        "line": 244
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace / with * in arithmetic\n@@ -236,17 +236,17 @@\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n-    (a + b) - (a * b) / (a % b)\n+    (a + b) - (a * b) * /* ~ changed by cargo-mutants ~ */ (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "arithmetic",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 245
+        },
+        "start": {
+          "column": 1,
+          "line": 243
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:244:23: replace / with * in arithmetic",
+    "package": "kitchen-sink",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 24,
+        "line": 244
+      },
+      "start": {
+        "column": 23,
+        "line": 244
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace * with + in arithmetic\n@@ -236,17 +236,17 @@\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n-    (a + b) - (a * b) / (a % b)\n+    (a + b) - (a + /* ~ changed by cargo-mutants ~ */ b) / (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "arithmetic",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 245
+        },
+        "start": {
+          "column": 1,
+          "line": 243
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:244:18: replace * with + in arithmetic",
+    "package": "kitchen-sink",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 244
+      },
+      "start": {
+        "column": 18,
+        "line": 244
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace * with / in arithmetic\n@@ -236,17 +236,17 @@\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n-    (a + b) - (a * b) / (a % b)\n+    (a + b) - (a / /* ~ changed by cargo-mutants ~ */ b) / (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "arithmetic",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 245
+        },
+        "start": {
+          "column": 1,
+          "line": 243
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:244:18: replace * with / in arithmetic",
+    "package": "kitchen-sink",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 244
+      },
+      "start": {
+        "column": 18,
+        "line": 244
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace % with / in arithmetic\n@@ -236,17 +236,17 @@\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n-    (a + b) - (a * b) / (a % b)\n+    (a + b) - (a * b) / (a / /* ~ changed by cargo-mutants ~ */ b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "arithmetic",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 245
+        },
+        "start": {
+          "column": 1,
+          "line": 243
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:244:28: replace % with / in arithmetic",
+    "package": "kitchen-sink",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 244
+      },
+      "start": {
+        "column": 28,
+        "line": 244
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace % with + in arithmetic\n@@ -236,17 +236,17 @@\n     a >>= 1;\n     a &= b;\n     a |= b;\n     a ^= b;\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n-    (a + b) - (a * b) / (a % b)\n+    (a + b) - (a * b) / (a + /* ~ changed by cargo-mutants ~ */ b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n     (a << b) | (a >> b) & (a ^ b)\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "arithmetic",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 245
+        },
+        "start": {
+          "column": 1,
+          "line": 243
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:244:28: replace % with + in arithmetic",
+    "package": "kitchen-sink",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 244
+      },
+      "start": {
+        "column": 28,
+        "line": 244
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace shifts_and_bits -> u32 with 0\n@@ -240,17 +240,17 @@\n     a\n }\n \n pub fn arithmetic(a: u32, b: u32) -> u32 {\n     (a + b) - (a * b) / (a % b)\n }\n \n pub fn shifts_and_bits(a: u32, b: u32) -> u32 {\n-    (a << b) | (a >> b) & (a ^ b)\n+    0 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn comparisons(a: u32, b: u32) -> bool {\n     a == b || a != b || a < b || a <= b || a > b || a >= b\n }\n \n pub fn unary(a: i32, b: bool) -> bool {\n     !b && -a < 0\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "shifts_and_bits",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 249
+        },
+        "start": {
+          "column": 1,
+          "line": 247
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:248:5: replace shifts_and_bits -> u32 with 0",
+    "package": "kitchen-sink",
+    "replacement": "0",
+    "span": {
+      "end": {
+        "column": 34,
+        "line": 248
+      },
+      "start": {
+        "column": 5,
+        "line": 248
+      }
+    }
+  }
+]

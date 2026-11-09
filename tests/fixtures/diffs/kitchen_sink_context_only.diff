@@ -1,0 +1,10 @@
+--- a/src/ops.rs
++++ b/src/ops.rs
+@@ -7,6 +7,7 @@
+ pub fn is_even(a: u32) -> bool {
+     a % 2 == 0
+ }
++
+ pub struct Counter {
+     pub n: u32,
+ }

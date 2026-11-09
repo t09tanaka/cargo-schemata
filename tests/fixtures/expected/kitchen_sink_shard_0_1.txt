@@ -1,0 +1,379 @@
+src/bin/tool.rs:2:5: replace main with ()
+src/bin/tool.rs:2:15: replace + with - in main
+src/bin/tool.rs:2:15: replace + with * in main
+src/bin/tool.rs:7:5: replace helper -> bool with true
+src/bin/tool.rs:7:5: replace helper -> bool with false
+src/bin/tool.rs:7:7: replace < with == in helper
+src/bin/tool.rs:7:7: replace < with > in helper
+src/bin/tool.rs:7:7: replace < with <= in helper
+src/lib.rs:26:5: replace unit_fn with ()
+src/lib.rs:30:5: replace returns_bool -> bool with false
+src/lib.rs:34:5: replace returns_string -> String with String::new()
+src/lib.rs:34:5: replace returns_string -> String with "xyzzy".into()
+src/lib.rs:38:5: replace returns_str -> &'static str with ""
+src/lib.rs:38:5: replace returns_str -> &'static str with "xyzzy"
+src/lib.rs:42:5: replace returns_unsigned -> u32 with 0
+src/lib.rs:42:5: replace returns_unsigned -> u32 with 1
+src/lib.rs:46:5: replace returns_signed -> i64 with 0
+src/lib.rs:46:5: replace returns_signed -> i64 with 1
+src/lib.rs:46:5: replace returns_signed -> i64 with -1
+src/lib.rs:50:5: replace returns_float -> f64 with 0.0
+src/lib.rs:50:5: replace returns_float -> f64 with 1.0
+src/lib.rs:50:5: replace returns_float -> f64 with -1.0
+src/lib.rs:54:5: replace returns_nonzero -> NonZeroU32 with 1.try_into().unwrap()
+src/lib.rs:58:5: replace returns_nonzero_signed -> NonZeroI32 with 1.try_into().unwrap()
+src/lib.rs:58:5: replace returns_nonzero_signed -> NonZeroI32 with (-1).try_into().unwrap()
+src/lib.rs:62:5: replace returns_option -> Option<u8> with None
+src/lib.rs:62:5: replace returns_option -> Option<u8> with Some(0)
+src/lib.rs:62:5: replace returns_option -> Option<u8> with Some(1)
+src/lib.rs:66:5: replace returns_option_string -> Option<String> with None
+src/lib.rs:66:5: replace returns_option_string -> Option<String> with Some(String::new())
+src/lib.rs:66:5: replace returns_option_string -> Option<String> with Some("xyzzy".into())
+src/lib.rs:70:5: replace returns_result -> Result<u32, std::num::ParseIntError> with Ok(0)
+src/lib.rs:70:5: replace returns_result -> Result<u32, std::num::ParseIntError> with Ok(1)
+src/lib.rs:74:5: replace returns_fmt_result -> std::fmt::Result with Ok(Default::default())
+src/lib.rs:78:5: replace returns_vec -> Vec<u8> with vec![]
+src/lib.rs:78:5: replace returns_vec -> Vec<u8> with vec![0]
+src/lib.rs:78:5: replace returns_vec -> Vec<u8> with vec![1]
+src/lib.rs:82:5: replace returns_cow -> Cow<'static, str> with Cow::Borrowed("")
+src/lib.rs:82:5: replace returns_cow -> Cow<'static, str> with Cow::Owned("".to_owned())
+src/lib.rs:82:5: replace returns_cow -> Cow<'static, str> with Cow::Borrowed("xyzzy")
+src/lib.rs:82:5: replace returns_cow -> Cow<'static, str> with Cow::Owned("xyzzy".to_owned())
+src/lib.rs:86:5: replace returns_boxed -> Box<u8> with Box::new(0)
+src/lib.rs:86:5: replace returns_boxed -> Box<u8> with Box::new(1)
+src/lib.rs:90:5: replace returns_arc_mutex -> Arc<Mutex<u8>> with Arc::new(Mutex::new(0))
+src/lib.rs:90:5: replace returns_arc_mutex -> Arc<Mutex<u8>> with Arc::new(Mutex::new(1))
+src/lib.rs:94:5: replace returns_set -> BTreeSet<u8> with BTreeSet::new()
+src/lib.rs:94:5: replace returns_set -> BTreeSet<u8> with BTreeSet::from_iter([0])
+src/lib.rs:94:5: replace returns_set -> BTreeSet<u8> with BTreeSet::from_iter([1])
+src/lib.rs:98:5: replace returns_deque -> VecDeque<u8> with VecDeque::new()
+src/lib.rs:98:5: replace returns_deque -> VecDeque<u8> with VecDeque::from_iter([0])
+src/lib.rs:98:5: replace returns_deque -> VecDeque<u8> with VecDeque::from_iter([1])
+src/lib.rs:102:5: replace returns_hash_map -> HashMap<String, bool> with HashMap::new()
+src/lib.rs:102:5: replace returns_hash_map -> HashMap<String, bool> with HashMap::from_iter([(String::new(), true)])
+src/lib.rs:102:5: replace returns_hash_map -> HashMap<String, bool> with HashMap::from_iter([(String::new(), false)])
+src/lib.rs:102:5: replace returns_hash_map -> HashMap<String, bool> with HashMap::from_iter([("xyzzy".into(), true)])
+src/lib.rs:102:5: replace returns_hash_map -> HashMap<String, bool> with HashMap::from_iter([("xyzzy".into(), false)])
+src/lib.rs:102:38: replace > with == in returns_hash_map
+src/lib.rs:102:38: replace > with < in returns_hash_map
+src/lib.rs:102:38: replace > with >= in returns_hash_map
+src/lib.rs:106:5: replace returns_btree_map -> BTreeMap<u8, u8> with BTreeMap::new()
+src/lib.rs:106:5: replace returns_btree_map -> BTreeMap<u8, u8> with BTreeMap::from_iter([(0, 0)])
+src/lib.rs:106:5: replace returns_btree_map -> BTreeMap<u8, u8> with BTreeMap::from_iter([(0, 1)])
+src/lib.rs:106:5: replace returns_btree_map -> BTreeMap<u8, u8> with BTreeMap::from_iter([(1, 0)])
+src/lib.rs:106:5: replace returns_btree_map -> BTreeMap<u8, u8> with BTreeMap::from_iter([(1, 1)])
+src/lib.rs:110:5: replace returns_tuple -> (u8, bool) with (0, true)
+src/lib.rs:110:5: replace returns_tuple -> (u8, bool) with (0, false)
+src/lib.rs:110:5: replace returns_tuple -> (u8, bool) with (1, true)
+src/lib.rs:110:5: replace returns_tuple -> (u8, bool) with (1, false)
+src/lib.rs:110:11: replace > with == in returns_tuple
+src/lib.rs:110:11: replace > with < in returns_tuple
+src/lib.rs:110:11: replace > with >= in returns_tuple
+src/lib.rs:114:5: replace returns_array -> [u8; 3] with [0; 3]
+src/lib.rs:114:5: replace returns_array -> [u8; 3] with [1; 3]
+src/lib.rs:118:5: replace returns_slice -> &[u8] with Vec::leak(Vec::new())
+src/lib.rs:118:5: replace returns_slice -> &[u8] with Vec::leak(vec![0])
+src/lib.rs:118:5: replace returns_slice -> &[u8] with Vec::leak(vec![1])
+src/lib.rs:122:5: replace returns_ref -> &u8 with Box::leak(Box::new(0))
+src/lib.rs:122:5: replace returns_ref -> &u8 with Box::leak(Box::new(1))
+src/lib.rs:126:5: replace returns_iterator -> impl Iterator<Item = u8> with ::std::iter::empty()
+src/lib.rs:126:5: replace returns_iterator -> impl Iterator<Item = u8> with ::std::iter::once(0)
+src/lib.rs:126:5: replace returns_iterator -> impl Iterator<Item = u8> with ::std::iter::once(1)
+src/lib.rs:138:5: replace returns_custom -> Custom with Default::default()
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::new()
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::from_iter([0])
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::new(0)
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::from(0)
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::from_iter([1])
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::new(1)
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::from(1)
+src/lib.rs:152:5: replace body_equals_replacement -> bool with false
+src/lib.rs:200:5: replace calls_with_capacity -> usize with 0
+src/lib.rs:200:5: replace calls_with_capacity -> usize with 1
+src/lib.rs:201:18: replace * with + in calls_with_capacity
+src/lib.rs:201:18: replace * with / in calls_with_capacity
+src/lib.rs:205:5: replace method_with_capacity -> usize with 0
+src/lib.rs:205:5: replace method_with_capacity -> usize with 1
+src/lib.rs:206:13: replace - with + in method_with_capacity
+src/lib.rs:206:13: replace - with / in method_with_capacity
+src/lib.rs:210:5: replace unicode_before_operator -> String with String::new()
+src/lib.rs:210:5: replace unicode_before_operator -> String with "xyzzy".into()
+src/lib.rs:215:5: replace nested_functions -> u32 with 0
+src/lib.rs:215:5: replace nested_functions -> u32 with 1
+src/lib.rs:216:9: replace nested_functions::inner -> u32 with 0
+src/lib.rs:216:9: replace nested_functions::inner -> u32 with 1
+src/lib.rs:216:11: replace * with + in nested_functions::inner
+src/lib.rs:216:11: replace * with / in nested_functions::inner
+src/lib.rs:218:30: replace - with + in nested_functions
+src/lib.rs:218:30: replace - with / in nested_functions
+src/lib.rs:219:14: replace + with - in nested_functions
+src/lib.rs:219:14: replace + with * in nested_functions
+src/lib.rs:223:5: replace multi_line_expression -> bool with true
+src/lib.rs:223:5: replace multi_line_expression -> bool with false
+src/lib.rs:225:9: replace || with && in multi_line_expression
+src/lib.rs:224:9: replace && with || in multi_line_expression
+src/lib.rs:223:7: replace > with == in multi_line_expression
+src/lib.rs:223:7: replace > with < in multi_line_expression
+src/lib.rs:223:7: replace > with >= in multi_line_expression
+src/lib.rs:224:14: replace < with == in multi_line_expression
+src/lib.rs:224:14: replace < with > in multi_line_expression
+src/lib.rs:224:14: replace < with <= in multi_line_expression
+src/lib.rs:226:13: replace == with != in multi_line_expression
+src/lib.rs:230:5: replace assignments -> u32 with 0
+src/lib.rs:230:5: replace assignments -> u32 with 1
+src/lib.rs:230:7: replace += with -= in assignments
+src/lib.rs:230:7: replace += with *= in assignments
+src/lib.rs:231:7: replace -= with += in assignments
+src/lib.rs:231:7: replace -= with /= in assignments
+src/lib.rs:232:7: replace *= with += in assignments
+src/lib.rs:232:7: replace *= with /= in assignments
+src/lib.rs:233:7: replace /= with %= in assignments
+src/lib.rs:233:7: replace /= with *= in assignments
+src/lib.rs:234:7: replace %= with /= in assignments
+src/lib.rs:234:7: replace %= with += in assignments
+src/lib.rs:235:7: replace <<= with >>= in assignments
+src/lib.rs:236:7: replace >>= with <<= in assignments
+src/lib.rs:237:7: replace &= with |= in assignments
+src/lib.rs:238:7: replace |= with &= in assignments
+src/lib.rs:239:7: replace ^= with |= in assignments
+src/lib.rs:239:7: replace ^= with &= in assignments
+src/lib.rs:244:5: replace arithmetic -> u32 with 0
+src/lib.rs:244:5: replace arithmetic -> u32 with 1
+src/lib.rs:244:13: replace - with + in arithmetic
+src/lib.rs:244:13: replace - with / in arithmetic
+src/lib.rs:244:8: replace + with - in arithmetic
+src/lib.rs:244:8: replace + with * in arithmetic
+src/lib.rs:244:23: replace / with % in arithmetic
+src/lib.rs:244:23: replace / with * in arithmetic
+src/lib.rs:244:18: replace * with + in arithmetic
+src/lib.rs:244:18: replace * with / in arithmetic
+src/lib.rs:244:28: replace % with / in arithmetic
+src/lib.rs:244:28: replace % with + in arithmetic
+src/lib.rs:248:5: replace shifts_and_bits -> u32 with 0
+src/lib.rs:248:5: replace shifts_and_bits -> u32 with 1
+src/lib.rs:248:14: replace | with & in shifts_and_bits
+src/lib.rs:248:14: replace | with ^ in shifts_and_bits
+src/lib.rs:248:8: replace << with >> in shifts_and_bits
+src/lib.rs:248:25: replace & with | in shifts_and_bits
+src/lib.rs:248:25: replace & with ^ in shifts_and_bits
+src/lib.rs:248:19: replace >> with << in shifts_and_bits
+src/lib.rs:248:30: replace ^ with | in shifts_and_bits
+src/lib.rs:248:30: replace ^ with & in shifts_and_bits
+src/lib.rs:252:5: replace comparisons -> bool with true
+src/lib.rs:252:5: replace comparisons -> bool with false
+src/lib.rs:252:50: replace || with && in comparisons
+src/lib.rs:252:41: replace || with && in comparisons
+src/lib.rs:252:31: replace || with && in comparisons
+src/lib.rs:252:22: replace || with && in comparisons
+src/lib.rs:252:12: replace || with && in comparisons
+src/lib.rs:252:7: replace == with != in comparisons
+src/lib.rs:252:17: replace != with == in comparisons
+src/lib.rs:252:27: replace < with == in comparisons
+src/lib.rs:252:27: replace < with > in comparisons
+src/lib.rs:252:27: replace < with <= in comparisons
+src/lib.rs:252:36: replace <= with > in comparisons
+src/lib.rs:252:46: replace > with == in comparisons
+src/lib.rs:252:46: replace > with < in comparisons
+src/lib.rs:252:46: replace > with >= in comparisons
+src/lib.rs:252:55: replace >= with < in comparisons
+src/lib.rs:256:5: replace unary -> bool with true
+src/lib.rs:256:5: replace unary -> bool with false
+src/lib.rs:256:8: replace && with || in unary
+src/lib.rs:256:5: delete ! in unary
+src/lib.rs:256:14: replace < with == in unary
+src/lib.rs:256:14: replace < with > in unary
+src/lib.rs:256:14: replace < with <= in unary
+src/lib.rs:256:11: delete - in unary
+src/lib.rs:260:5: replace deref_and_ref -> bool with true
+src/lib.rs:260:5: replace deref_and_ref -> bool with false
+src/lib.rs:260:8: replace && with || in deref_and_ref
+src/lib.rs:260:11: delete ! in deref_and_ref
+src/lib.rs:264:5: replace match_with_catchall -> &'static str with ""
+src/lib.rs:264:5: replace match_with_catchall -> &'static str with "xyzzy"
+src/lib.rs:265:9: delete match arm 0 in match_with_catchall
+src/lib.rs:266:9: delete match arm 1 | 2 in match_with_catchall
+src/lib.rs:267:14: replace match guard n > 100 with true in match_with_catchall
+src/lib.rs:267:14: replace match guard n > 100 with false in match_with_catchall
+src/lib.rs:268:14: replace match guard n % 2 == 0 with true in match_with_catchall
+src/lib.rs:268:14: replace match guard n % 2 == 0 with false in match_with_catchall
+src/lib.rs:267:16: replace > with == in match_with_catchall
+src/lib.rs:267:16: replace > with < in match_with_catchall
+src/lib.rs:267:16: replace > with >= in match_with_catchall
+src/lib.rs:268:20: replace == with != in match_with_catchall
+src/lib.rs:268:16: replace % with / in match_with_catchall
+src/lib.rs:268:16: replace % with + in match_with_catchall
+src/lib.rs:274:5: replace match_without_catchall -> u8 with 0
+src/lib.rs:274:5: replace match_without_catchall -> u8 with 1
+src/lib.rs:275:20: replace match guard n > 3 with true in match_without_catchall
+src/lib.rs:275:20: replace match guard n > 3 with false in match_without_catchall
+src/lib.rs:275:22: replace > with == in match_without_catchall
+src/lib.rs:275:22: replace > with < in match_without_catchall
+src/lib.rs:275:22: replace > with >= in match_without_catchall
+src/lib.rs:276:22: replace + with - in match_without_catchall
+src/lib.rs:276:22: replace + with * in match_without_catchall
+src/lib.rs:282:5: replace match_multiline_pattern -> u8 with 0
+src/lib.rs:282:5: replace match_multiline_pattern -> u8 with 1
+src/lib.rs:283:9: delete match arm "alpha" | "beta" in match_multiline_pattern
+src/lib.rs:285:9: delete match arm Some_Other in match_multiline_pattern
+src/lib.rs:298:5: replace struct_with_base -> Config with Default::default()
+src/lib.rs:299:9: delete field name from struct Config expression in struct_with_base
+src/lib.rs:300:9: delete field retries from struct Config expression in struct_with_base
+src/lib.rs:301:9: delete field verbose from struct Config expression in struct_with_base
+src/lib.rs:307:5: replace struct_without_base -> Config with Default::default()
+src/lib.rs:315:5: replace struct_base_no_trailing_comma -> Config with Default::default()
+src/lib.rs:315:14: delete field name from struct Config expression in struct_base_no_trailing_comma
+src/lib.rs:315:20: delete field retries from struct Config expression in struct_base_no_trailing_comma
+src/lib.rs:319:5: replace if_let_chain -> u32 with 0
+src/lib.rs:319:5: replace if_let_chain -> u32 with 1
+src/lib.rs:319:33: replace && with || in if_let_chain
+src/lib.rs:319:24: replace && with || in if_let_chain
+src/lib.rs:319:29: replace > with == in if_let_chain
+src/lib.rs:319:29: replace > with < in if_let_chain
+src/lib.rs:319:29: replace > with >= in if_let_chain
+src/lib.rs:320:11: replace + with - in if_let_chain
+src/lib.rs:320:11: replace + with * in if_let_chain
+src/lib.rs:327:5: replace while_let_chain -> u32 with 0
+src/lib.rs:327:5: replace while_let_chain -> u32 with 1
+src/lib.rs:328:33: replace && with || in while_let_chain
+src/lib.rs:328:38: replace != with == in while_let_chain
+src/lib.rs:329:15: replace += with -= in while_let_chain
+src/lib.rs:329:15: replace += with *= in while_let_chain
+src/lib.rs:335:5: replace plain_and_inside_if -> bool with true
+src/lib.rs:335:5: replace plain_and_inside_if -> bool with false
+src/lib.rs:335:10: replace && with || in plain_and_inside_if
+src/lib.rs:335:19: replace || with && in plain_and_inside_if
+src/lib.rs:339:5: replace const_function -> u32 with 0
+src/lib.rs:339:5: replace const_function -> u32 with 1
+src/lib.rs:339:11: replace + with - in const_function
+src/lib.rs:339:11: replace + with * in const_function
+src/lib.rs:339:7: replace * with + in const_function
+src/lib.rs:339:7: replace * with / in const_function
+src/lib.rs:342:31: replace - with +
+src/lib.rs:342:31: replace - with /
+src/lib.rs:342:27: replace * with +
+src/lib.rs:342:27: replace * with /
+src/lib.rs:344:34: replace + with -
+src/lib.rs:344:34: replace + with *
+src/lib.rs:346:37: replace && with ||
+src/lib.rs:346:30: delete !
+src/lib.rs:346:46: replace > with ==
+src/lib.rs:346:46: replace > with <
+src/lib.rs:346:46: replace > with >=
+src/lib.rs:350:9: replace helper -> u32 with 0
+src/lib.rs:350:9: replace helper -> u32 with 1
+src/lib.rs:350:11: replace + with - in helper
+src/lib.rs:350:11: replace + with * in helper
+src/lib.rs:352:15: replace * with +
+src/lib.rs:352:15: replace * with /
+src/lib.rs:356:36: replace + with -
+src/lib.rs:356:36: replace + with *
+src/lib.rs:357:23: replace * with +
+src/lib.rs:357:23: replace * with /
+src/lib.rs:361:5: replace array_types_and_repeat -> u32 with 0
+src/lib.rs:361:5: replace array_types_and_repeat -> u32 with 1
+src/lib.rs:361:23: replace + with - in array_types_and_repeat
+src/lib.rs:361:23: replace + with * in array_types_and_repeat
+src/lib.rs:361:36: replace + with - in array_types_and_repeat
+src/lib.rs:361:36: replace + with * in array_types_and_repeat
+src/lib.rs:363:7: replace + with - in array_types_and_repeat
+src/lib.rs:363:7: replace + with * in array_types_and_repeat
+src/lib.rs:369:5: replace const_generic_argument -> Generic<{2 *3}> with Default::default()
+src/lib.rs:368:48: replace * with + in const_generic_argument
+src/lib.rs:368:48: replace * with / in const_generic_argument
+src/lib.rs:369:19: replace + with - in const_generic_argument
+src/lib.rs:369:19: replace + with * in const_generic_argument
+src/lib.rs:373:11: replace << with >>
+src/lib.rs:374:11: replace + with -
+src/lib.rs:374:11: replace + with *
+src/lib.rs:379:5: replace const_block -> u32 with 0
+src/lib.rs:379:5: replace const_block -> u32 with 1
+src/lib.rs:379:23: replace * with + in const_block
+src/lib.rs:379:23: replace * with / in const_block
+src/lib.rs:380:7: replace + with - in const_block
+src/lib.rs:380:7: replace + with * in const_block
+src/lib.rs:386:30: replace * with +
+src/lib.rs:386:30: replace * with /
+src/lib.rs:394:9: replace Holder::build -> u32 with 0
+src/lib.rs:394:9: replace Holder::build -> u32 with 1
+src/lib.rs:394:11: replace * with + in Holder::build
+src/lib.rs:394:11: replace * with / in Holder::build
+src/lib.rs:398:9: replace Holder::const_method -> u32 with 0
+src/lib.rs:398:9: replace Holder::const_method -> u32 with 1
+src/lib.rs:398:11: replace - with + in Holder::const_method
+src/lib.rs:398:11: replace - with / in Holder::const_method
+src/lib.rs:411:9: replace Holder::nested_return -> Vec<Option<String>> with vec![]
+src/lib.rs:411:9: replace Holder::nested_return -> Vec<Option<String>> with vec![None]
+src/lib.rs:411:9: replace Holder::nested_return -> Vec<Option<String>> with vec![Some(String::new())]
+src/lib.rs:411:9: replace Holder::nested_return -> Vec<Option<String>> with vec![Some("xyzzy".into())]
+src/lib.rs:416:26: replace + with -
+src/lib.rs:416:26: replace + with *
+src/lib.rs:421:9: replace Shape::describe -> String with String::new()
+src/lib.rs:421:9: replace Shape::describe -> String with "xyzzy".into()
+src/lib.rs:435:26: replace + with -
+src/lib.rs:435:26: replace + with *
+src/lib.rs:438:9: replace <impl Shape for Holder>::area -> f64 with 0.0
+src/lib.rs:438:9: replace <impl Shape for Holder>::area -> f64 with 1.0
+src/lib.rs:438:9: replace <impl Shape for Holder>::area -> f64 with -1.0
+src/lib.rs:438:13: replace + with - in <impl Shape for Holder>::area
+src/lib.rs:438:13: replace + with * in <impl Shape for Holder>::area
+src/lib.rs:444:9: replace <impl Shape for Wrapper<T>>::area -> f64 with 0.0
+src/lib.rs:444:9: replace <impl Shape for Wrapper<T>>::area -> f64 with 1.0
+src/lib.rs:444:9: replace <impl Shape for Wrapper<T>>::area -> f64 with -1.0
+src/lib.rs:444:13: replace * with + in <impl Shape for Wrapper<T>>::area
+src/lib.rs:444:13: replace * with / in <impl Shape for Wrapper<T>>::area
+src/lib.rs:450:9: replace <impl Shape for &'a[T]>::area -> f64 with 0.0
+src/lib.rs:450:9: replace <impl Shape for &'a[T]>::area -> f64 with 1.0
+src/lib.rs:450:9: replace <impl Shape for &'a[T]>::area -> f64 with -1.0
+src/lib.rs:450:27: replace - with + in <impl Shape for &'a[T]>::area
+src/lib.rs:450:27: replace - with / in <impl Shape for &'a[T]>::area
+src/lib.rs:463:9: replace <impl std::fmt::Display for Holder>::fmt -> std::fmt::Result with Ok(Default::default())
+src/lib.rs:483:9: replace inline::in_inline_module -> u32 with 0
+src/lib.rs:483:9: replace inline::in_inline_module -> u32 with 1
+src/lib.rs:483:11: replace + with - in inline::in_inline_module
+src/lib.rs:483:11: replace + with * in inline::in_inline_module
+src/lib.rs:488:13: replace inline::deeper::in_deeper_module -> bool with true
+src/lib.rs:488:13: replace inline::deeper::in_deeper_module -> bool with false
+src/lib.rs:488:15: replace > with == in inline::deeper::in_deeper_module
+src/lib.rs:488:15: replace > with < in inline::deeper::in_deeper_module
+src/lib.rs:488:15: replace > with >= in inline::deeper::in_deeper_module
+src/lib.rs:500:5: replace uses_macro -> u32 with 0
+src/lib.rs:500:5: replace uses_macro -> u32 with 1
+src/lib.rs:500:21: replace + with - in uses_macro
+src/lib.rs:500:21: replace + with * in uses_macro
+src/nested/mod.rs:4:5: replace shallow -> u32 with 0
+src/nested/mod.rs:4:5: replace shallow -> u32 with 1
+src/nested/mod.rs:4:7: replace - with + in shallow
+src/nested/mod.rs:4:7: replace - with / in shallow
+src/ops.rs:4:5: replace add -> u32 with 0
+src/ops.rs:4:5: replace add -> u32 with 1
+src/ops.rs:4:7: replace + with - in add
+src/ops.rs:4:7: replace + with * in add
+src/ops.rs:8:5: replace is_even -> bool with true
+src/ops.rs:8:5: replace is_even -> bool with false
+src/ops.rs:8:11: replace == with != in is_even
+src/ops.rs:8:7: replace % with / in is_even
+src/ops.rs:8:7: replace % with + in is_even
+src/ops.rs:17:9: replace Counter::bump with ()
+src/ops.rs:17:16: replace += with -= in Counter::bump
+src/ops.rs:17:16: replace += with *= in Counter::bump
+src/ops.rs:21:9: replace Counter::is_zero -> bool with true
+src/ops.rs:21:9: replace Counter::is_zero -> bool with false
+src/ops.rs:21:16: replace == with != in Counter::is_zero
+src/crlf.rs:4:5: replace crlf_fn -> u32 with 0
+src/crlf.rs:4:5: replace crlf_fn -> u32 with 1
+src/crlf.rs:5:10: replace > with == in crlf_fn
+src/crlf.rs:5:10: replace > with < in crlf_fn
+src/crlf.rs:5:10: replace > with >= in crlf_fn
+src/crlf.rs:5:18: replace + with - in crlf_fn
+src/crlf.rs:5:18: replace + with * in crlf_fn
+src/crlf.rs:9:5: replace crlf_match -> u8 with 0
+src/crlf.rs:9:5: replace crlf_match -> u8 with 1
+src/crlf.rs:10:9: delete match arm 0 in crlf_match
+src/crlf.rs:11:9: delete match arm 1 in crlf_match
+src/renamed_file.rs:2:5: replace renamed -> u32 with 0
+src/renamed_file.rs:2:5: replace renamed -> u32 with 1
+src/renamed_file.rs:2:7: replace * with + in renamed
+src/renamed_file.rs:2:7: replace * with / in renamed
+src/nested/deep.rs:2:5: replace deep -> bool with true
+src/nested/deep.rs:2:5: replace deep -> bool with false
+src/nested/deep.rs:2:7: replace >= with < in deep
