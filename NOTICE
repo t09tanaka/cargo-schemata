@@ -1,7 +1,7 @@
 cargo-schemata
 Copyright (c) 2026 Takuto Tanaka
 
-This project plans to port its mutation rules (exclusions, operators,
+This project ports its mutation rules (exclusions, operators,
 replacement values, and name formatting) from cargo-mutants.
 
 cargo-mutants

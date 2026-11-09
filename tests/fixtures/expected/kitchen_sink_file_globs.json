@@ -1,0 +1,930 @@
+[
+  {
+    "diff": "--- src/ops.rs\n+++ replace add -> u32 with 0\n@@ -1,12 +1,12 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n-    a + b\n+    0 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn is_even(a: u32) -> bool {\n     a % 2 == 0\n }\n \n pub struct Counter {\n     pub n: u32,\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "add",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 5
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/ops.rs:4:5: replace add -> u32 with 0",
+    "package": "kitchen-sink",
+    "replacement": "0",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 4
+      },
+      "start": {
+        "column": 5,
+        "line": 4
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace add -> u32 with 1\n@@ -1,12 +1,12 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n-    a + b\n+    1 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn is_even(a: u32) -> bool {\n     a % 2 == 0\n }\n \n pub struct Counter {\n     pub n: u32,\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "add",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 5
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/ops.rs:4:5: replace add -> u32 with 1",
+    "package": "kitchen-sink",
+    "replacement": "1",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 4
+      },
+      "start": {
+        "column": 5,
+        "line": 4
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace + with - in add\n@@ -1,12 +1,12 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n-    a + b\n+    a - /* ~ changed by cargo-mutants ~ */ b\n }\n \n pub fn is_even(a: u32) -> bool {\n     a % 2 == 0\n }\n \n pub struct Counter {\n     pub n: u32,\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "add",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 5
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/ops.rs:4:7: replace + with - in add",
+    "package": "kitchen-sink",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 4
+      },
+      "start": {
+        "column": 7,
+        "line": 4
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace + with * in add\n@@ -1,12 +1,12 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n-    a + b\n+    a * /* ~ changed by cargo-mutants ~ */ b\n }\n \n pub fn is_even(a: u32) -> bool {\n     a % 2 == 0\n }\n \n pub struct Counter {\n     pub n: u32,\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "add",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 5
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/ops.rs:4:7: replace + with * in add",
+    "package": "kitchen-sink",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 4
+      },
+      "start": {
+        "column": 7,
+        "line": 4
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace is_even -> bool with true\n@@ -1,16 +1,16 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n     a + b\n }\n \n pub fn is_even(a: u32) -> bool {\n-    a % 2 == 0\n+    true /* ~ changed by cargo-mutants ~ */\n }\n \n pub struct Counter {\n     pub n: u32,\n }\n \n impl Counter {\n     pub fn bump(&mut self) {\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "is_even",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 9
+        },
+        "start": {
+          "column": 1,
+          "line": 7
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/ops.rs:8:5: replace is_even -> bool with true",
+    "package": "kitchen-sink",
+    "replacement": "true",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 8
+      },
+      "start": {
+        "column": 5,
+        "line": 8
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace is_even -> bool with false\n@@ -1,16 +1,16 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n     a + b\n }\n \n pub fn is_even(a: u32) -> bool {\n-    a % 2 == 0\n+    false /* ~ changed by cargo-mutants ~ */\n }\n \n pub struct Counter {\n     pub n: u32,\n }\n \n impl Counter {\n     pub fn bump(&mut self) {\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "is_even",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 9
+        },
+        "start": {
+          "column": 1,
+          "line": 7
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/ops.rs:8:5: replace is_even -> bool with false",
+    "package": "kitchen-sink",
+    "replacement": "false",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 8
+      },
+      "start": {
+        "column": 5,
+        "line": 8
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace == with != in is_even\n@@ -1,16 +1,16 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n     a + b\n }\n \n pub fn is_even(a: u32) -> bool {\n-    a % 2 == 0\n+    a % 2 != /* ~ changed by cargo-mutants ~ */ 0\n }\n \n pub struct Counter {\n     pub n: u32,\n }\n \n impl Counter {\n     pub fn bump(&mut self) {\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "is_even",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 9
+        },
+        "start": {
+          "column": 1,
+          "line": 7
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/ops.rs:8:11: replace == with != in is_even",
+    "package": "kitchen-sink",
+    "replacement": "!=",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 8
+      },
+      "start": {
+        "column": 11,
+        "line": 8
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace % with / in is_even\n@@ -1,16 +1,16 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n     a + b\n }\n \n pub fn is_even(a: u32) -> bool {\n-    a % 2 == 0\n+    a / /* ~ changed by cargo-mutants ~ */ 2 == 0\n }\n \n pub struct Counter {\n     pub n: u32,\n }\n \n impl Counter {\n     pub fn bump(&mut self) {\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "is_even",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 9
+        },
+        "start": {
+          "column": 1,
+          "line": 7
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/ops.rs:8:7: replace % with / in is_even",
+    "package": "kitchen-sink",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 8
+      },
+      "start": {
+        "column": 7,
+        "line": 8
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace % with + in is_even\n@@ -1,16 +1,16 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n     a + b\n }\n \n pub fn is_even(a: u32) -> bool {\n-    a % 2 == 0\n+    a + /* ~ changed by cargo-mutants ~ */ 2 == 0\n }\n \n pub struct Counter {\n     pub n: u32,\n }\n \n impl Counter {\n     pub fn bump(&mut self) {\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "is_even",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 9
+        },
+        "start": {
+          "column": 1,
+          "line": 7
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/ops.rs:8:7: replace % with + in is_even",
+    "package": "kitchen-sink",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 8
+      },
+      "start": {
+        "column": 7,
+        "line": 8
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace Counter::bump with ()\n@@ -9,15 +9,15 @@\n }\n \n pub struct Counter {\n     pub n: u32,\n }\n \n impl Counter {\n     pub fn bump(&mut self) {\n-        self.n += 1;\n+        () /* ~ changed by cargo-mutants ~ */\n     }\n \n     pub fn is_zero(&self) -> bool {\n         self.n == 0\n     }\n }\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "Counter::bump",
+      "return_type": "",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 18
+        },
+        "start": {
+          "column": 5,
+          "line": 16
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/ops.rs:17:9: replace Counter::bump with ()",
+    "package": "kitchen-sink",
+    "replacement": "()",
+    "span": {
+      "end": {
+        "column": 21,
+        "line": 17
+      },
+      "start": {
+        "column": 9,
+        "line": 17
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace += with -= in Counter::bump\n@@ -9,15 +9,15 @@\n }\n \n pub struct Counter {\n     pub n: u32,\n }\n \n impl Counter {\n     pub fn bump(&mut self) {\n-        self.n += 1;\n+        self.n -= /* ~ changed by cargo-mutants ~ */ 1;\n     }\n \n     pub fn is_zero(&self) -> bool {\n         self.n == 0\n     }\n }\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "Counter::bump",
+      "return_type": "",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 18
+        },
+        "start": {
+          "column": 5,
+          "line": 16
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/ops.rs:17:16: replace += with -= in Counter::bump",
+    "package": "kitchen-sink",
+    "replacement": "-=",
+    "span": {
+      "end": {
+        "column": 18,
+        "line": 17
+      },
+      "start": {
+        "column": 16,
+        "line": 17
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace += with *= in Counter::bump\n@@ -9,15 +9,15 @@\n }\n \n pub struct Counter {\n     pub n: u32,\n }\n \n impl Counter {\n     pub fn bump(&mut self) {\n-        self.n += 1;\n+        self.n *= /* ~ changed by cargo-mutants ~ */ 1;\n     }\n \n     pub fn is_zero(&self) -> bool {\n         self.n == 0\n     }\n }\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "Counter::bump",
+      "return_type": "",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 18
+        },
+        "start": {
+          "column": 5,
+          "line": 16
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/ops.rs:17:16: replace += with *= in Counter::bump",
+    "package": "kitchen-sink",
+    "replacement": "*=",
+    "span": {
+      "end": {
+        "column": 18,
+        "line": 17
+      },
+      "start": {
+        "column": 16,
+        "line": 17
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace Counter::is_zero -> bool with true\n@@ -13,11 +13,11 @@\n }\n \n impl Counter {\n     pub fn bump(&mut self) {\n         self.n += 1;\n     }\n \n     pub fn is_zero(&self) -> bool {\n-        self.n == 0\n+        true /* ~ changed by cargo-mutants ~ */\n     }\n }\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "Counter::is_zero",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 22
+        },
+        "start": {
+          "column": 5,
+          "line": 20
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/ops.rs:21:9: replace Counter::is_zero -> bool with true",
+    "package": "kitchen-sink",
+    "replacement": "true",
+    "span": {
+      "end": {
+        "column": 20,
+        "line": 21
+      },
+      "start": {
+        "column": 9,
+        "line": 21
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace Counter::is_zero -> bool with false\n@@ -13,11 +13,11 @@\n }\n \n impl Counter {\n     pub fn bump(&mut self) {\n         self.n += 1;\n     }\n \n     pub fn is_zero(&self) -> bool {\n-        self.n == 0\n+        false /* ~ changed by cargo-mutants ~ */\n     }\n }\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "Counter::is_zero",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 22
+        },
+        "start": {
+          "column": 5,
+          "line": 20
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/ops.rs:21:9: replace Counter::is_zero -> bool with false",
+    "package": "kitchen-sink",
+    "replacement": "false",
+    "span": {
+      "end": {
+        "column": 20,
+        "line": 21
+      },
+      "start": {
+        "column": 9,
+        "line": 21
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace == with != in Counter::is_zero\n@@ -13,11 +13,11 @@\n }\n \n impl Counter {\n     pub fn bump(&mut self) {\n         self.n += 1;\n     }\n \n     pub fn is_zero(&self) -> bool {\n-        self.n == 0\n+        self.n != /* ~ changed by cargo-mutants ~ */ 0\n     }\n }\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "Counter::is_zero",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 22
+        },
+        "start": {
+          "column": 5,
+          "line": 20
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/ops.rs:21:16: replace == with != in Counter::is_zero",
+    "package": "kitchen-sink",
+    "replacement": "!=",
+    "span": {
+      "end": {
+        "column": 18,
+        "line": 21
+      },
+      "start": {
+        "column": 16,
+        "line": 21
+      }
+    }
+  },
+  {
+    "diff": "--- src/crlf.rs\n+++ replace crlf_fn -> u32 with 0\n@@ -1,13 +1,12 @@\n //! This file has CRLF line endings on purpose.\n \n pub fn crlf_fn(a: u32) -> u32 {\n-    let label = \"é→é\";\n-    if a > 1 { a + label.len() as u32 } else { 0 }\n+    0 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn crlf_match(a: u8) -> u8 {\n     match a {\n         0 => 1,\n         1 => 2,\n         _ => 3,\n     }\n",
+    "file": "src/crlf.rs",
+    "function": {
+      "function_name": "crlf_fn",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 6
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/crlf.rs:4:5: replace crlf_fn -> u32 with 0",
+    "package": "kitchen-sink",
+    "replacement": "0",
+    "span": {
+      "end": {
+        "column": 51,
+        "line": 5
+      },
+      "start": {
+        "column": 5,
+        "line": 4
+      }
+    }
+  },
+  {
+    "diff": "--- src/crlf.rs\n+++ replace crlf_fn -> u32 with 1\n@@ -1,13 +1,12 @@\n //! This file has CRLF line endings on purpose.\n \n pub fn crlf_fn(a: u32) -> u32 {\n-    let label = \"é→é\";\n-    if a > 1 { a + label.len() as u32 } else { 0 }\n+    1 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn crlf_match(a: u8) -> u8 {\n     match a {\n         0 => 1,\n         1 => 2,\n         _ => 3,\n     }\n",
+    "file": "src/crlf.rs",
+    "function": {
+      "function_name": "crlf_fn",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 6
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/crlf.rs:4:5: replace crlf_fn -> u32 with 1",
+    "package": "kitchen-sink",
+    "replacement": "1",
+    "span": {
+      "end": {
+        "column": 51,
+        "line": 5
+      },
+      "start": {
+        "column": 5,
+        "line": 4
+      }
+    }
+  },
+  {
+    "diff": "--- src/crlf.rs\n+++ replace > with == in crlf_fn\n@@ -1,13 +1,13 @@\n //! This file has CRLF line endings on purpose.\n \n pub fn crlf_fn(a: u32) -> u32 {\n     let label = \"é→é\";\n-    if a > 1 { a + label.len() as u32 } else { 0 }\n+    if a == /* ~ changed by cargo-mutants ~ */ 1 { a + label.len() as u32 } else { 0 }\n }\n \n pub fn crlf_match(a: u8) -> u8 {\n     match a {\n         0 => 1,\n         1 => 2,\n         _ => 3,\n     }\n",
+    "file": "src/crlf.rs",
+    "function": {
+      "function_name": "crlf_fn",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 6
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/crlf.rs:5:10: replace > with == in crlf_fn",
+    "package": "kitchen-sink",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 5
+      },
+      "start": {
+        "column": 10,
+        "line": 5
+      }
+    }
+  },
+  {
+    "diff": "--- src/crlf.rs\n+++ replace > with < in crlf_fn\n@@ -1,13 +1,13 @@\n //! This file has CRLF line endings on purpose.\n \n pub fn crlf_fn(a: u32) -> u32 {\n     let label = \"é→é\";\n-    if a > 1 { a + label.len() as u32 } else { 0 }\n+    if a < /* ~ changed by cargo-mutants ~ */ 1 { a + label.len() as u32 } else { 0 }\n }\n \n pub fn crlf_match(a: u8) -> u8 {\n     match a {\n         0 => 1,\n         1 => 2,\n         _ => 3,\n     }\n",
+    "file": "src/crlf.rs",
+    "function": {
+      "function_name": "crlf_fn",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 6
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/crlf.rs:5:10: replace > with < in crlf_fn",
+    "package": "kitchen-sink",
+    "replacement": "<",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 5
+      },
+      "start": {
+        "column": 10,
+        "line": 5
+      }
+    }
+  },
+  {
+    "diff": "--- src/crlf.rs\n+++ replace > with >= in crlf_fn\n@@ -1,13 +1,13 @@\n //! This file has CRLF line endings on purpose.\n \n pub fn crlf_fn(a: u32) -> u32 {\n     let label = \"é→é\";\n-    if a > 1 { a + label.len() as u32 } else { 0 }\n+    if a >= /* ~ changed by cargo-mutants ~ */ 1 { a + label.len() as u32 } else { 0 }\n }\n \n pub fn crlf_match(a: u8) -> u8 {\n     match a {\n         0 => 1,\n         1 => 2,\n         _ => 3,\n     }\n",
+    "file": "src/crlf.rs",
+    "function": {
+      "function_name": "crlf_fn",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 6
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/crlf.rs:5:10: replace > with >= in crlf_fn",
+    "package": "kitchen-sink",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 5
+      },
+      "start": {
+        "column": 10,
+        "line": 5
+      }
+    }
+  },
+  {
+    "diff": "--- src/crlf.rs\n+++ replace + with - in crlf_fn\n@@ -1,13 +1,13 @@\n //! This file has CRLF line endings on purpose.\n \n pub fn crlf_fn(a: u32) -> u32 {\n     let label = \"é→é\";\n-    if a > 1 { a + label.len() as u32 } else { 0 }\n+    if a > 1 { a - /* ~ changed by cargo-mutants ~ */ label.len() as u32 } else { 0 }\n }\n \n pub fn crlf_match(a: u8) -> u8 {\n     match a {\n         0 => 1,\n         1 => 2,\n         _ => 3,\n     }\n",
+    "file": "src/crlf.rs",
+    "function": {
+      "function_name": "crlf_fn",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 6
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/crlf.rs:5:18: replace + with - in crlf_fn",
+    "package": "kitchen-sink",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 5
+      },
+      "start": {
+        "column": 18,
+        "line": 5
+      }
+    }
+  },
+  {
+    "diff": "--- src/crlf.rs\n+++ replace + with * in crlf_fn\n@@ -1,13 +1,13 @@\n //! This file has CRLF line endings on purpose.\n \n pub fn crlf_fn(a: u32) -> u32 {\n     let label = \"é→é\";\n-    if a > 1 { a + label.len() as u32 } else { 0 }\n+    if a > 1 { a * /* ~ changed by cargo-mutants ~ */ label.len() as u32 } else { 0 }\n }\n \n pub fn crlf_match(a: u8) -> u8 {\n     match a {\n         0 => 1,\n         1 => 2,\n         _ => 3,\n     }\n",
+    "file": "src/crlf.rs",
+    "function": {
+      "function_name": "crlf_fn",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 6
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/crlf.rs:5:18: replace + with * in crlf_fn",
+    "package": "kitchen-sink",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 5
+      },
+      "start": {
+        "column": 18,
+        "line": 5
+      }
+    }
+  },
+  {
+    "diff": "--- src/crlf.rs\n+++ replace crlf_match -> u8 with 0\n@@ -1,14 +1,10 @@\n //! This file has CRLF line endings on purpose.\n \n pub fn crlf_fn(a: u32) -> u32 {\n     let label = \"é→é\";\n     if a > 1 { a + label.len() as u32 } else { 0 }\n }\n \n pub fn crlf_match(a: u8) -> u8 {\n-    match a {\n-        0 => 1,\n-        1 => 2,\n-        _ => 3,\n-    }\n+    0 /* ~ changed by cargo-mutants ~ */\n }\n",
+    "file": "src/crlf.rs",
+    "function": {
+      "function_name": "crlf_match",
+      "return_type": "-> u8",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 14
+        },
+        "start": {
+          "column": 1,
+          "line": 8
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/crlf.rs:9:5: replace crlf_match -> u8 with 0",
+    "package": "kitchen-sink",
+    "replacement": "0",
+    "span": {
+      "end": {
+        "column": 6,
+        "line": 13
+      },
+      "start": {
+        "column": 5,
+        "line": 9
+      }
+    }
+  },
+  {
+    "diff": "--- src/crlf.rs\n+++ replace crlf_match -> u8 with 1\n@@ -1,14 +1,10 @@\n //! This file has CRLF line endings on purpose.\n \n pub fn crlf_fn(a: u32) -> u32 {\n     let label = \"é→é\";\n     if a > 1 { a + label.len() as u32 } else { 0 }\n }\n \n pub fn crlf_match(a: u8) -> u8 {\n-    match a {\n-        0 => 1,\n-        1 => 2,\n-        _ => 3,\n-    }\n+    1 /* ~ changed by cargo-mutants ~ */\n }\n",
+    "file": "src/crlf.rs",
+    "function": {
+      "function_name": "crlf_match",
+      "return_type": "-> u8",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 14
+        },
+        "start": {
+          "column": 1,
+          "line": 8
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/crlf.rs:9:5: replace crlf_match -> u8 with 1",
+    "package": "kitchen-sink",
+    "replacement": "1",
+    "span": {
+      "end": {
+        "column": 6,
+        "line": 13
+      },
+      "start": {
+        "column": 5,
+        "line": 9
+      }
+    }
+  },
+  {
+    "diff": "--- src/crlf.rs\n+++ delete match arm 0 in crlf_match\n@@ -2,13 +2,13 @@\n \n pub fn crlf_fn(a: u32) -> u32 {\n     let label = \"é→é\";\n     if a > 1 { a + label.len() as u32 } else { 0 }\n }\n \n pub fn crlf_match(a: u8) -> u8 {\n     match a {\n-        0 => 1,\n+         /* ~ changed by cargo-mutants ~ */\n         1 => 2,\n         _ => 3,\n     }\n }\n",
+    "file": "src/crlf.rs",
+    "function": {
+      "function_name": "crlf_match",
+      "return_type": "-> u8",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 14
+        },
+        "start": {
+          "column": 1,
+          "line": 8
+        }
+      }
+    },
+    "genre": "MatchArm",
+    "name": "src/crlf.rs:10:9: delete match arm 0 in crlf_match",
+    "package": "kitchen-sink",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 16,
+        "line": 10
+      },
+      "start": {
+        "column": 9,
+        "line": 10
+      }
+    }
+  },
+  {
+    "diff": "--- src/crlf.rs\n+++ delete match arm 1 in crlf_match\n@@ -3,12 +3,12 @@\n pub fn crlf_fn(a: u32) -> u32 {\n     let label = \"é→é\";\n     if a > 1 { a + label.len() as u32 } else { 0 }\n }\n \n pub fn crlf_match(a: u8) -> u8 {\n     match a {\n         0 => 1,\n-        1 => 2,\n+         /* ~ changed by cargo-mutants ~ */\n         _ => 3,\n     }\n }\n",
+    "file": "src/crlf.rs",
+    "function": {
+      "function_name": "crlf_match",
+      "return_type": "-> u8",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 14
+        },
+        "start": {
+          "column": 1,
+          "line": 8
+        }
+      }
+    },
+    "genre": "MatchArm",
+    "name": "src/crlf.rs:11:9: delete match arm 1 in crlf_match",
+    "package": "kitchen-sink",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 16,
+        "line": 11
+      },
+      "start": {
+        "column": 9,
+        "line": 11
+      }
+    }
+  },
+  {
+    "diff": "--- src/nested/deep.rs\n+++ replace deep -> bool with true\n@@ -1,10 +1,10 @@\n pub fn deep(a: u32) -> bool {\n-    a >= 10\n+    true /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     #[test]\n     fn deep_works() {\n         assert!(super::deep(11));\n     }\n",
+    "file": "src/nested/deep.rs",
+    "function": {
+      "function_name": "deep",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/nested/deep.rs:2:5: replace deep -> bool with true",
+    "package": "kitchen-sink",
+    "replacement": "true",
+    "span": {
+      "end": {
+        "column": 12,
+        "line": 2
+      },
+      "start": {
+        "column": 5,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- src/nested/deep.rs\n+++ replace deep -> bool with false\n@@ -1,10 +1,10 @@\n pub fn deep(a: u32) -> bool {\n-    a >= 10\n+    false /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     #[test]\n     fn deep_works() {\n         assert!(super::deep(11));\n     }\n",
+    "file": "src/nested/deep.rs",
+    "function": {
+      "function_name": "deep",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/nested/deep.rs:2:5: replace deep -> bool with false",
+    "package": "kitchen-sink",
+    "replacement": "false",
+    "span": {
+      "end": {
+        "column": 12,
+        "line": 2
+      },
+      "start": {
+        "column": 5,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- src/nested/deep.rs\n+++ replace >= with < in deep\n@@ -1,10 +1,10 @@\n pub fn deep(a: u32) -> bool {\n-    a >= 10\n+    a < /* ~ changed by cargo-mutants ~ */ 10\n }\n \n #[cfg(test)]\n mod tests {\n     #[test]\n     fn deep_works() {\n         assert!(super::deep(11));\n     }\n",
+    "file": "src/nested/deep.rs",
+    "function": {
+      "function_name": "deep",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/nested/deep.rs:2:7: replace >= with < in deep",
+    "package": "kitchen-sink",
+    "replacement": "<",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 2
+      },
+      "start": {
+        "column": 7,
+        "line": 2
+      }
+    }
+  }
+]

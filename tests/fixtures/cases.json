@@ -1,0 +1,15 @@
+[
+  {"name": "kitchen_sink", "dir": "kitchen_sink", "args": []},
+  {"name": "kitchen_sink_text", "dir": "kitchen_sink", "args": [], "text": true},
+  {"name": "kitchen_sink_file_globs", "dir": "kitchen_sink", "args": ["--file", "deep.rs", "--file", "src/ops.rs", "--file", "crlf.rs"]},
+  {"name": "kitchen_sink_exclude_globs", "dir": "kitchen_sink", "args": ["--exclude", "nested", "--exclude", "crlf.rs", "--exclude", "bin", "--exclude", "src/ops.rs"]},
+  {"name": "kitchen_sink_regex", "dir": "kitchen_sink", "args": ["--re", "replace .* with", "--re", "delete ", "--exclude-re", "returns_", "--exclude-re", "const"]},
+  {"name": "kitchen_sink_error_skip", "dir": "kitchen_sink", "args": ["--error", "::anyhow::anyhow!(\"mutated\")", "--skip-calls", "to_uppercase,format", "--skip-calls-defaults", "false", "--file", "src/lib.rs"]},
+  {"name": "with_config", "dir": "with_config", "args": []},
+  {"name": "with_config_no_config", "dir": "with_config", "args": ["--no-config"]},
+  {"name": "with_config_merged_with_cli", "dir": "with_config", "args": ["--file", "src/lib.rs", "--exclude-re", "sums", "--re", "replace negate"]},
+  {"name": "workspace_root", "dir": "workspace", "args": []},
+  {"name": "workspace_package", "dir": "workspace", "args": ["-p", "beta"]},
+  {"name": "workspace_member_dir", "dir": "workspace/alpha", "args": []},
+  {"name": "workspace_flag", "dir": "workspace/alpha", "args": ["--workspace"]}
+]

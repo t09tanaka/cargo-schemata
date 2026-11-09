@@ -1,0 +1,610 @@
+[
+  {
+    "diff": "--- src/lib.rs\n+++ replace check -> Result<u32, Error> with Ok(0)\n@@ -2,17 +2,17 @@\n pub mod sub;\n \n pub enum Error {\n     Mutated,\n     Real,\n }\n \n pub fn check(a: u32) -> Result<u32, Error> {\n-    if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n+    Ok(0) /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n     width + a - b\n }\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "check",
+      "return_type": "-> Result<u32, Error>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 11
+        },
+        "start": {
+          "column": 1,
+          "line": 9
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:10:5: replace check -> Result<u32, Error> with Ok(0)",
+    "package": "with-config",
+    "replacement": "Ok(0)",
+    "span": {
+      "end": {
+        "column": 54,
+        "line": 10
+      },
+      "start": {
+        "column": 5,
+        "line": 10
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace check -> Result<u32, Error> with Ok(1)\n@@ -2,17 +2,17 @@\n pub mod sub;\n \n pub enum Error {\n     Mutated,\n     Real,\n }\n \n pub fn check(a: u32) -> Result<u32, Error> {\n-    if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n+    Ok(1) /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n     width + a - b\n }\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "check",
+      "return_type": "-> Result<u32, Error>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 11
+        },
+        "start": {
+          "column": 1,
+          "line": 9
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:10:5: replace check -> Result<u32, Error> with Ok(1)",
+    "package": "with-config",
+    "replacement": "Ok(1)",
+    "span": {
+      "end": {
+        "column": 54,
+        "line": 10
+      },
+      "start": {
+        "column": 5,
+        "line": 10
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace check -> Result<u32, Error> with Err(Error::Mutated)\n@@ -2,17 +2,17 @@\n pub mod sub;\n \n pub enum Error {\n     Mutated,\n     Real,\n }\n \n pub fn check(a: u32) -> Result<u32, Error> {\n-    if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n+    Err(Error::Mutated) /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n     width + a - b\n }\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "check",
+      "return_type": "-> Result<u32, Error>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 11
+        },
+        "start": {
+          "column": 1,
+          "line": 9
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:10:5: replace check -> Result<u32, Error> with Err(Error::Mutated)",
+    "package": "with-config",
+    "replacement": "Err(Error::Mutated)",
+    "span": {
+      "end": {
+        "column": 54,
+        "line": 10
+      },
+      "start": {
+        "column": 5,
+        "line": 10
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace + with - in check\n@@ -2,17 +2,17 @@\n pub mod sub;\n \n pub enum Error {\n     Mutated,\n     Real,\n }\n \n pub fn check(a: u32) -> Result<u32, Error> {\n-    if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n+    if a == 3 { Err(Error::Real) } else { Ok(a - /* ~ changed by cargo-mutants ~ */ 1) }\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n     width + a - b\n }\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "check",
+      "return_type": "-> Result<u32, Error>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 11
+        },
+        "start": {
+          "column": 1,
+          "line": 9
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:10:48: replace + with - in check",
+    "package": "with-config",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 49,
+        "line": 10
+      },
+      "start": {
+        "column": 48,
+        "line": 10
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace + with * in check\n@@ -2,17 +2,17 @@\n pub mod sub;\n \n pub enum Error {\n     Mutated,\n     Real,\n }\n \n pub fn check(a: u32) -> Result<u32, Error> {\n-    if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n+    if a == 3 { Err(Error::Real) } else { Ok(a * /* ~ changed by cargo-mutants ~ */ 1) }\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n     width + a - b\n }\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "check",
+      "return_type": "-> Result<u32, Error>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 11
+        },
+        "start": {
+          "column": 1,
+          "line": 9
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:10:48: replace + with * in check",
+    "package": "with-config",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 49,
+        "line": 10
+      },
+      "start": {
+        "column": 48,
+        "line": 10
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace sums -> u32 with 0\n@@ -6,20 +6,17 @@\n     Real,\n }\n \n pub fn check(a: u32) -> Result<u32, Error> {\n     if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n-    let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n-    trace_call(a - 1);\n-    log(b * 2);\n-    width + a - b\n+    0 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn negate(a: i32) -> i32 {\n     -a\n }\n \n pub fn eq(a: u32, b: u32) -> bool {\n     a == b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "sums",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 18
+        },
+        "start": {
+          "column": 1,
+          "line": 13
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:14:5: replace sums -> u32 with 0",
+    "package": "with-config",
+    "replacement": "0",
+    "span": {
+      "end": {
+        "column": 18,
+        "line": 17
+      },
+      "start": {
+        "column": 5,
+        "line": 14
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace sums -> u32 with 1\n@@ -6,20 +6,17 @@\n     Real,\n }\n \n pub fn check(a: u32) -> Result<u32, Error> {\n     if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n-    let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n-    trace_call(a - 1);\n-    log(b * 2);\n-    width + a - b\n+    1 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn negate(a: i32) -> i32 {\n     -a\n }\n \n pub fn eq(a: u32, b: u32) -> bool {\n     a == b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "sums",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 18
+        },
+        "start": {
+          "column": 1,
+          "line": 13
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:14:5: replace sums -> u32 with 1",
+    "package": "with-config",
+    "replacement": "1",
+    "span": {
+      "end": {
+        "column": 18,
+        "line": 17
+      },
+      "start": {
+        "column": 5,
+        "line": 14
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace + with - in sums\n@@ -6,17 +6,17 @@\n     Real,\n }\n \n pub fn check(a: u32) -> Result<u32, Error> {\n     if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n-    let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n+    let width = Vec::<u8>::with_capacity(a as usize - /* ~ changed by cargo-mutants ~ */ 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n     width + a - b\n }\n \n pub fn negate(a: i32) -> i32 {\n     -a\n }\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "sums",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 18
+        },
+        "start": {
+          "column": 1,
+          "line": 13
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:14:53: replace + with - in sums",
+    "package": "with-config",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 54,
+        "line": 14
+      },
+      "start": {
+        "column": 53,
+        "line": 14
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace + with * in sums\n@@ -6,17 +6,17 @@\n     Real,\n }\n \n pub fn check(a: u32) -> Result<u32, Error> {\n     if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n-    let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n+    let width = Vec::<u8>::with_capacity(a as usize * /* ~ changed by cargo-mutants ~ */ 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n     width + a - b\n }\n \n pub fn negate(a: i32) -> i32 {\n     -a\n }\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "sums",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 18
+        },
+        "start": {
+          "column": 1,
+          "line": 13
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:14:53: replace + with * in sums",
+    "package": "with-config",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 54,
+        "line": 14
+      },
+      "start": {
+        "column": 53,
+        "line": 14
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace - with + in sums\n@@ -9,17 +9,17 @@\n pub fn check(a: u32) -> Result<u32, Error> {\n     if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n-    width + a - b\n+    width + a + /* ~ changed by cargo-mutants ~ */ b\n }\n \n pub fn negate(a: i32) -> i32 {\n     -a\n }\n \n pub fn eq(a: u32, b: u32) -> bool {\n     a == b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "sums",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 18
+        },
+        "start": {
+          "column": 1,
+          "line": 13
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:17:15: replace - with + in sums",
+    "package": "with-config",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 16,
+        "line": 17
+      },
+      "start": {
+        "column": 15,
+        "line": 17
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace - with / in sums\n@@ -9,17 +9,17 @@\n pub fn check(a: u32) -> Result<u32, Error> {\n     if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n-    width + a - b\n+    width + a / /* ~ changed by cargo-mutants ~ */ b\n }\n \n pub fn negate(a: i32) -> i32 {\n     -a\n }\n \n pub fn eq(a: u32, b: u32) -> bool {\n     a == b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "sums",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 18
+        },
+        "start": {
+          "column": 1,
+          "line": 13
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:17:15: replace - with / in sums",
+    "package": "with-config",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 16,
+        "line": 17
+      },
+      "start": {
+        "column": 15,
+        "line": 17
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace + with - in sums\n@@ -9,17 +9,17 @@\n pub fn check(a: u32) -> Result<u32, Error> {\n     if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n-    width + a - b\n+    width - /* ~ changed by cargo-mutants ~ */ a - b\n }\n \n pub fn negate(a: i32) -> i32 {\n     -a\n }\n \n pub fn eq(a: u32, b: u32) -> bool {\n     a == b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "sums",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 18
+        },
+        "start": {
+          "column": 1,
+          "line": 13
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:17:11: replace + with - in sums",
+    "package": "with-config",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 12,
+        "line": 17
+      },
+      "start": {
+        "column": 11,
+        "line": 17
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace + with * in sums\n@@ -9,17 +9,17 @@\n pub fn check(a: u32) -> Result<u32, Error> {\n     if a == 3 { Err(Error::Real) } else { Ok(a + 1) }\n }\n \n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n-    width + a - b\n+    width * /* ~ changed by cargo-mutants ~ */ a - b\n }\n \n pub fn negate(a: i32) -> i32 {\n     -a\n }\n \n pub fn eq(a: u32, b: u32) -> bool {\n     a == b\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "sums",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 18
+        },
+        "start": {
+          "column": 1,
+          "line": 13
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/lib.rs:17:11: replace + with * in sums",
+    "package": "with-config",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 12,
+        "line": 17
+      },
+      "start": {
+        "column": 11,
+        "line": 17
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace negate -> i32 with 0\n@@ -13,17 +13,17 @@\n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n     width + a - b\n }\n \n pub fn negate(a: i32) -> i32 {\n-    -a\n+    0 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn eq(a: u32, b: u32) -> bool {\n     a == b\n }\n \n fn trace_call(_a: u32) {}\n fn log(_a: u32) {}\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "negate",
+      "return_type": "-> i32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 22
+        },
+        "start": {
+          "column": 1,
+          "line": 20
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:21:5: replace negate -> i32 with 0",
+    "package": "with-config",
+    "replacement": "0",
+    "span": {
+      "end": {
+        "column": 7,
+        "line": 21
+      },
+      "start": {
+        "column": 5,
+        "line": 21
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace negate -> i32 with 1\n@@ -13,17 +13,17 @@\n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n     width + a - b\n }\n \n pub fn negate(a: i32) -> i32 {\n-    -a\n+    1 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn eq(a: u32, b: u32) -> bool {\n     a == b\n }\n \n fn trace_call(_a: u32) {}\n fn log(_a: u32) {}\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "negate",
+      "return_type": "-> i32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 22
+        },
+        "start": {
+          "column": 1,
+          "line": 20
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:21:5: replace negate -> i32 with 1",
+    "package": "with-config",
+    "replacement": "1",
+    "span": {
+      "end": {
+        "column": 7,
+        "line": 21
+      },
+      "start": {
+        "column": 5,
+        "line": 21
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace negate -> i32 with -1\n@@ -13,17 +13,17 @@\n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n     width + a - b\n }\n \n pub fn negate(a: i32) -> i32 {\n-    -a\n+    -1 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn eq(a: u32, b: u32) -> bool {\n     a == b\n }\n \n fn trace_call(_a: u32) {}\n fn log(_a: u32) {}\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "negate",
+      "return_type": "-> i32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 22
+        },
+        "start": {
+          "column": 1,
+          "line": 20
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:21:5: replace negate -> i32 with -1",
+    "package": "with-config",
+    "replacement": "-1",
+    "span": {
+      "end": {
+        "column": 7,
+        "line": 21
+      },
+      "start": {
+        "column": 5,
+        "line": 21
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ delete - in negate\n@@ -13,17 +13,17 @@\n pub fn sums(a: u32, b: u32) -> u32 {\n     let width = Vec::<u8>::with_capacity(a as usize + 1).len() as u32;\n     trace_call(a - 1);\n     log(b * 2);\n     width + a - b\n }\n \n pub fn negate(a: i32) -> i32 {\n-    -a\n+     /* ~ changed by cargo-mutants ~ */a\n }\n \n pub fn eq(a: u32, b: u32) -> bool {\n     a == b\n }\n \n fn trace_call(_a: u32) {}\n fn log(_a: u32) {}\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "negate",
+      "return_type": "-> i32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 22
+        },
+        "start": {
+          "column": 1,
+          "line": 20
+        }
+      }
+    },
+    "genre": "UnaryOperator",
+    "name": "src/lib.rs:21:5: delete - in negate",
+    "package": "with-config",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 6,
+        "line": 21
+      },
+      "start": {
+        "column": 5,
+        "line": 21
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace eq -> bool with true\n@@ -17,13 +17,13 @@\n     width + a - b\n }\n \n pub fn negate(a: i32) -> i32 {\n     -a\n }\n \n pub fn eq(a: u32, b: u32) -> bool {\n-    a == b\n+    true /* ~ changed by cargo-mutants ~ */\n }\n \n fn trace_call(_a: u32) {}\n fn log(_a: u32) {}\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "eq",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 26
+        },
+        "start": {
+          "column": 1,
+          "line": 24
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:25:5: replace eq -> bool with true",
+    "package": "with-config",
+    "replacement": "true",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 25
+      },
+      "start": {
+        "column": 5,
+        "line": 25
+      }
+    }
+  },
+  {
+    "diff": "--- src/lib.rs\n+++ replace eq -> bool with false\n@@ -17,13 +17,13 @@\n     width + a - b\n }\n \n pub fn negate(a: i32) -> i32 {\n     -a\n }\n \n pub fn eq(a: u32, b: u32) -> bool {\n-    a == b\n+    false /* ~ changed by cargo-mutants ~ */\n }\n \n fn trace_call(_a: u32) {}\n fn log(_a: u32) {}\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "eq",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 26
+        },
+        "start": {
+          "column": 1,
+          "line": 24
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:25:5: replace eq -> bool with false",
+    "package": "with-config",
+    "replacement": "false",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 25
+      },
+      "start": {
+        "column": 5,
+        "line": 25
+      }
+    }
+  }
+]

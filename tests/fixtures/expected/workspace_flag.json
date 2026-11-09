@@ -1,0 +1,322 @@
+[
+  {
+    "diff": "--- alpha/src/lib.rs\n+++ replace alpha -> u32 with 0\n@@ -1,3 +1,3 @@\n pub fn alpha(a: u32) -> u32 {\n-    a + 1\n+    0 /* ~ changed by cargo-mutants ~ */\n }\n",
+    "file": "alpha/src/lib.rs",
+    "function": {
+      "function_name": "alpha",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "alpha/src/lib.rs:2:5: replace alpha -> u32 with 0",
+    "package": "alpha",
+    "replacement": "0",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 2
+      },
+      "start": {
+        "column": 5,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- alpha/src/lib.rs\n+++ replace alpha -> u32 with 1\n@@ -1,3 +1,3 @@\n pub fn alpha(a: u32) -> u32 {\n-    a + 1\n+    1 /* ~ changed by cargo-mutants ~ */\n }\n",
+    "file": "alpha/src/lib.rs",
+    "function": {
+      "function_name": "alpha",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "alpha/src/lib.rs:2:5: replace alpha -> u32 with 1",
+    "package": "alpha",
+    "replacement": "1",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 2
+      },
+      "start": {
+        "column": 5,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- alpha/src/lib.rs\n+++ replace + with - in alpha\n@@ -1,3 +1,3 @@\n pub fn alpha(a: u32) -> u32 {\n-    a + 1\n+    a - /* ~ changed by cargo-mutants ~ */ 1\n }\n",
+    "file": "alpha/src/lib.rs",
+    "function": {
+      "function_name": "alpha",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "alpha/src/lib.rs:2:7: replace + with - in alpha",
+    "package": "alpha",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 2
+      },
+      "start": {
+        "column": 7,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- alpha/src/lib.rs\n+++ replace + with * in alpha\n@@ -1,3 +1,3 @@\n pub fn alpha(a: u32) -> u32 {\n-    a + 1\n+    a * /* ~ changed by cargo-mutants ~ */ 1\n }\n",
+    "file": "alpha/src/lib.rs",
+    "function": {
+      "function_name": "alpha",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "alpha/src/lib.rs:2:7: replace + with * in alpha",
+    "package": "alpha",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 2
+      },
+      "start": {
+        "column": 7,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- beta/src/lib.rs\n+++ replace beta -> bool with true\n@@ -1,3 +1,3 @@\n pub fn beta(a: u32) -> bool {\n-    a > 1\n+    true /* ~ changed by cargo-mutants ~ */\n }\n",
+    "file": "beta/src/lib.rs",
+    "function": {
+      "function_name": "beta",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "beta/src/lib.rs:2:5: replace beta -> bool with true",
+    "package": "beta",
+    "replacement": "true",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 2
+      },
+      "start": {
+        "column": 5,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- beta/src/lib.rs\n+++ replace beta -> bool with false\n@@ -1,3 +1,3 @@\n pub fn beta(a: u32) -> bool {\n-    a > 1\n+    false /* ~ changed by cargo-mutants ~ */\n }\n",
+    "file": "beta/src/lib.rs",
+    "function": {
+      "function_name": "beta",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "beta/src/lib.rs:2:5: replace beta -> bool with false",
+    "package": "beta",
+    "replacement": "false",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 2
+      },
+      "start": {
+        "column": 5,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- beta/src/lib.rs\n+++ replace > with == in beta\n@@ -1,3 +1,3 @@\n pub fn beta(a: u32) -> bool {\n-    a > 1\n+    a == /* ~ changed by cargo-mutants ~ */ 1\n }\n",
+    "file": "beta/src/lib.rs",
+    "function": {
+      "function_name": "beta",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "beta/src/lib.rs:2:7: replace > with == in beta",
+    "package": "beta",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 2
+      },
+      "start": {
+        "column": 7,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- beta/src/lib.rs\n+++ replace > with < in beta\n@@ -1,3 +1,3 @@\n pub fn beta(a: u32) -> bool {\n-    a > 1\n+    a < /* ~ changed by cargo-mutants ~ */ 1\n }\n",
+    "file": "beta/src/lib.rs",
+    "function": {
+      "function_name": "beta",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "beta/src/lib.rs:2:7: replace > with < in beta",
+    "package": "beta",
+    "replacement": "<",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 2
+      },
+      "start": {
+        "column": 7,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- beta/src/lib.rs\n+++ replace > with >= in beta\n@@ -1,3 +1,3 @@\n pub fn beta(a: u32) -> bool {\n-    a > 1\n+    a >= /* ~ changed by cargo-mutants ~ */ 1\n }\n",
+    "file": "beta/src/lib.rs",
+    "function": {
+      "function_name": "beta",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "beta/src/lib.rs:2:7: replace > with >= in beta",
+    "package": "beta",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 2
+      },
+      "start": {
+        "column": 7,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- beta/src/main.rs\n+++ replace main with ()\n@@ -1,3 +1,3 @@\n fn main() {\n-    println!(\"{}\", 1 - 1);\n+    () /* ~ changed by cargo-mutants ~ */\n }\n",
+    "file": "beta/src/main.rs",
+    "function": {
+      "function_name": "main",
+      "return_type": "",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "beta/src/main.rs:2:5: replace main with ()",
+    "package": "beta",
+    "replacement": "()",
+    "span": {
+      "end": {
+        "column": 27,
+        "line": 2
+      },
+      "start": {
+        "column": 5,
+        "line": 2
+      }
+    }
+  }
+]
