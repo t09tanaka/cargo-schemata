@@ -347,7 +347,7 @@ fn wrong_usage_exits_with_two() {
     for args in [
         &["-j", "0"][..],
         &["--timeout", "0"],
-        &["--in-diff=x"],
+        &["--shard=3/3"],
         &["--list", "-j", "2"],
     ] {
         let out = Command::new(env!("CARGO_BIN_EXE_cargo-schemata"))

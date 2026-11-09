@@ -11,15 +11,64 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use camino::Utf8Path;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
+use itertools::Itertools;
 use regex::RegexSet;
 use serde::Deserialize;
 use syn::Expr;
 
 use crate::mutant::Mutant;
 
+/// Wrong usage: what is wrong with the command line or a configuration file.
+/// The exit code is 2.
+#[derive(Debug)]
+pub struct Usage(pub String);
+
+impl std::fmt::Display for Usage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Usage {}
+
+/// The keys of `.cargo/mutants.toml` that cargo-schemata uses.
+const USED_KEYS: &[&str] = &[
+    "error_values",
+    "examine_globs",
+    "examine_re",
+    "exclude_globs",
+    "exclude_re",
+    "skip_calls",
+    "skip_calls_defaults",
+];
+
+/// The other keys cargo-mutants 27.1.0 knows. They are accepted, so that one
+/// file can serve both tools, and cargo-schemata warns that it does not use them.
+const UNUSED_KEYS: &[&str] = &[
+    "additional_cargo_args",
+    "additional_cargo_test_args",
+    "all_features",
+    "build_timeout_multiplier",
+    "cap_lints",
+    "copy_vcs",
+    "copy_target",
+    "gitignore",
+    "features",
+    "minimum_test_timeout",
+    "no_default_features",
+    "output",
+    "profile",
+    "test_package",
+    "test_workspace",
+    "timeout_multiplier",
+    "test_tool",
+    "sharding",
+];
+
 /// The subset of the `.cargo/mutants.toml` configuration that affects listing.
 ///
-/// Keys that only matter for building and running tests are accepted and ignored.
+/// The keys cargo-mutants knows and cargo-schemata does not use are accepted
+/// (with a warning, see `read_file`); any other key is wrong usage.
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -41,9 +90,35 @@ pub struct Config {
 
 impl Config {
     pub fn read_file(path: &Path) -> Result<Config> {
-        let toml =
+        let text =
             read_to_string(path).with_context(|| format!("read config {}", path.display()))?;
-        toml::de::from_str(&toml).with_context(|| format!("parse toml from {}", path.display()))
+        let table: toml::Table = toml::de::from_str(&text)
+            .with_context(|| format!("parse toml from {}", path.display()))?;
+        let unknown: Vec<&str> = table
+            .keys()
+            .map(String::as_str)
+            .filter(|k| !USED_KEYS.contains(k) && !UNUSED_KEYS.contains(k))
+            .collect();
+        if !unknown.is_empty() {
+            return Err(Usage(format!(
+                "{}: unknown key{} {}; the keys of cargo-mutants 27.1.0 are accepted, \
+                 and cargo-schemata uses {}",
+                path.display(),
+                if unknown.len() == 1 { "" } else { "s" },
+                unknown.iter().map(|k| format!("`{k}`")).join(", "),
+                USED_KEYS.iter().map(|k| format!("`{k}`")).join(", "),
+            ))
+            .into());
+        }
+        for key in table.keys().filter(|k| UNUSED_KEYS.contains(&k.as_str())) {
+            eprintln!(
+                "cargo schemata: warning: {}: `{key}` is not used by cargo-schemata",
+                path.display()
+            );
+        }
+        table
+            .try_into()
+            .with_context(|| format!("parse toml from {}", path.display()))
     }
 
     /// Read the config from a tree's `.cargo/mutants.toml`, and return a default (empty)
@@ -235,7 +310,7 @@ mod test {
             examine_globs = ["b.rs"]
             skip_calls = ["z"]
             skip_calls_defaults = false
-            some_other_key = 1
+            timeout_multiplier = 1
             "#,
         )
         .unwrap();
@@ -246,5 +321,45 @@ mod test {
         assert_eq!(o.skip_calls, ["x", "y", "z"]);
         let d = Options::new(&Filters::default(), &Config::default()).unwrap();
         assert_eq!(d.skip_calls, ["with_capacity"]);
+    }
+
+    fn config_file(name: &str, text: &str) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("schemata-config-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("mutants.toml");
+        std::fs::write(&path, text).unwrap();
+        path
+    }
+
+    #[test]
+    fn unknown_keys_are_wrong_usage_and_named() {
+        let path = config_file(
+            "unknown",
+            "exclude_re = [\"a\"]\nbogus = 1\nalso_bogus = 2\n",
+        );
+        let err = Config::read_file(&path).unwrap_err();
+        let usage = err.downcast_ref::<Usage>().expect("a usage error");
+        assert!(usage.0.contains("`also_bogus`, `bogus`"), "{usage}");
+        assert!(usage.0.contains("unknown keys"), "{usage}");
+        let path = config_file("unknown1", "bogus = 1\n");
+        let err = Config::read_file(&path).unwrap_err();
+        assert!(err.to_string().contains("unknown key `bogus`"), "{err}");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn keys_of_cargo_mutants_are_accepted_and_the_used_ones_read() {
+        let mut text = String::from("exclude_re = [\"x\"]\nskip_calls_defaults = false\n");
+        text.push_str("timeout_multiplier = 2.0\nsharding = \"slice\"\ntest_tool = \"cargo\"\n");
+        text.push_str("features = [\"a\"]\nadditional_cargo_args = [\"--all-targets\"]\n");
+        let path = config_file("known", &text);
+        let config = Config::read_file(&path).unwrap();
+        assert_eq!(config.exclude_re, ["x"]);
+        assert_eq!(config.skip_calls_defaults, Some(false));
+        // `emit_diffs` is not a key of cargo-mutants' file either
+        std::fs::write(&path, "emit_diffs = true\n").unwrap();
+        assert!(Config::read_file(&path).is_err());
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 }

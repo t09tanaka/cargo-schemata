@@ -1,0 +1,2 @@
+beta/src/lib.rs:2:7: replace > with >= in beta
+beta/src/main.rs:2:5: replace main with ()

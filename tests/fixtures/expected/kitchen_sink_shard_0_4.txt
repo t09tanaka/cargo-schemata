@@ -1,0 +1,95 @@
+src/bin/tool.rs:2:5: replace main with ()
+src/bin/tool.rs:2:15: replace + with - in main
+src/bin/tool.rs:2:15: replace + with * in main
+src/bin/tool.rs:7:5: replace helper -> bool with true
+src/bin/tool.rs:7:5: replace helper -> bool with false
+src/bin/tool.rs:7:7: replace < with == in helper
+src/bin/tool.rs:7:7: replace < with > in helper
+src/bin/tool.rs:7:7: replace < with <= in helper
+src/lib.rs:26:5: replace unit_fn with ()
+src/lib.rs:30:5: replace returns_bool -> bool with false
+src/lib.rs:34:5: replace returns_string -> String with String::new()
+src/lib.rs:34:5: replace returns_string -> String with "xyzzy".into()
+src/lib.rs:38:5: replace returns_str -> &'static str with ""
+src/lib.rs:38:5: replace returns_str -> &'static str with "xyzzy"
+src/lib.rs:42:5: replace returns_unsigned -> u32 with 0
+src/lib.rs:42:5: replace returns_unsigned -> u32 with 1
+src/lib.rs:46:5: replace returns_signed -> i64 with 0
+src/lib.rs:46:5: replace returns_signed -> i64 with 1
+src/lib.rs:46:5: replace returns_signed -> i64 with -1
+src/lib.rs:50:5: replace returns_float -> f64 with 0.0
+src/lib.rs:50:5: replace returns_float -> f64 with 1.0
+src/lib.rs:50:5: replace returns_float -> f64 with -1.0
+src/lib.rs:54:5: replace returns_nonzero -> NonZeroU32 with 1.try_into().unwrap()
+src/lib.rs:58:5: replace returns_nonzero_signed -> NonZeroI32 with 1.try_into().unwrap()
+src/lib.rs:58:5: replace returns_nonzero_signed -> NonZeroI32 with (-1).try_into().unwrap()
+src/lib.rs:62:5: replace returns_option -> Option<u8> with None
+src/lib.rs:62:5: replace returns_option -> Option<u8> with Some(0)
+src/lib.rs:62:5: replace returns_option -> Option<u8> with Some(1)
+src/lib.rs:66:5: replace returns_option_string -> Option<String> with None
+src/lib.rs:66:5: replace returns_option_string -> Option<String> with Some(String::new())
+src/lib.rs:66:5: replace returns_option_string -> Option<String> with Some("xyzzy".into())
+src/lib.rs:70:5: replace returns_result -> Result<u32, std::num::ParseIntError> with Ok(0)
+src/lib.rs:70:5: replace returns_result -> Result<u32, std::num::ParseIntError> with Ok(1)
+src/lib.rs:74:5: replace returns_fmt_result -> std::fmt::Result with Ok(Default::default())
+src/lib.rs:78:5: replace returns_vec -> Vec<u8> with vec![]
+src/lib.rs:78:5: replace returns_vec -> Vec<u8> with vec![0]
+src/lib.rs:78:5: replace returns_vec -> Vec<u8> with vec![1]
+src/lib.rs:82:5: replace returns_cow -> Cow<'static, str> with Cow::Borrowed("")
+src/lib.rs:82:5: replace returns_cow -> Cow<'static, str> with Cow::Owned("".to_owned())
+src/lib.rs:82:5: replace returns_cow -> Cow<'static, str> with Cow::Borrowed("xyzzy")
+src/lib.rs:82:5: replace returns_cow -> Cow<'static, str> with Cow::Owned("xyzzy".to_owned())
+src/lib.rs:86:5: replace returns_boxed -> Box<u8> with Box::new(0)
+src/lib.rs:86:5: replace returns_boxed -> Box<u8> with Box::new(1)
+src/lib.rs:90:5: replace returns_arc_mutex -> Arc<Mutex<u8>> with Arc::new(Mutex::new(0))
+src/lib.rs:90:5: replace returns_arc_mutex -> Arc<Mutex<u8>> with Arc::new(Mutex::new(1))
+src/lib.rs:94:5: replace returns_set -> BTreeSet<u8> with BTreeSet::new()
+src/lib.rs:94:5: replace returns_set -> BTreeSet<u8> with BTreeSet::from_iter([0])
+src/lib.rs:94:5: replace returns_set -> BTreeSet<u8> with BTreeSet::from_iter([1])
+src/lib.rs:98:5: replace returns_deque -> VecDeque<u8> with VecDeque::new()
+src/lib.rs:98:5: replace returns_deque -> VecDeque<u8> with VecDeque::from_iter([0])
+src/lib.rs:98:5: replace returns_deque -> VecDeque<u8> with VecDeque::from_iter([1])
+src/lib.rs:102:5: replace returns_hash_map -> HashMap<String, bool> with HashMap::new()
+src/lib.rs:102:5: replace returns_hash_map -> HashMap<String, bool> with HashMap::from_iter([(String::new(), true)])
+src/lib.rs:102:5: replace returns_hash_map -> HashMap<String, bool> with HashMap::from_iter([(String::new(), false)])
+src/lib.rs:102:5: replace returns_hash_map -> HashMap<String, bool> with HashMap::from_iter([("xyzzy".into(), true)])
+src/lib.rs:102:5: replace returns_hash_map -> HashMap<String, bool> with HashMap::from_iter([("xyzzy".into(), false)])
+src/lib.rs:102:38: replace > with == in returns_hash_map
+src/lib.rs:102:38: replace > with < in returns_hash_map
+src/lib.rs:102:38: replace > with >= in returns_hash_map
+src/lib.rs:106:5: replace returns_btree_map -> BTreeMap<u8, u8> with BTreeMap::new()
+src/lib.rs:106:5: replace returns_btree_map -> BTreeMap<u8, u8> with BTreeMap::from_iter([(0, 0)])
+src/lib.rs:106:5: replace returns_btree_map -> BTreeMap<u8, u8> with BTreeMap::from_iter([(0, 1)])
+src/lib.rs:106:5: replace returns_btree_map -> BTreeMap<u8, u8> with BTreeMap::from_iter([(1, 0)])
+src/lib.rs:106:5: replace returns_btree_map -> BTreeMap<u8, u8> with BTreeMap::from_iter([(1, 1)])
+src/lib.rs:110:5: replace returns_tuple -> (u8, bool) with (0, true)
+src/lib.rs:110:5: replace returns_tuple -> (u8, bool) with (0, false)
+src/lib.rs:110:5: replace returns_tuple -> (u8, bool) with (1, true)
+src/lib.rs:110:5: replace returns_tuple -> (u8, bool) with (1, false)
+src/lib.rs:110:11: replace > with == in returns_tuple
+src/lib.rs:110:11: replace > with < in returns_tuple
+src/lib.rs:110:11: replace > with >= in returns_tuple
+src/lib.rs:114:5: replace returns_array -> [u8; 3] with [0; 3]
+src/lib.rs:114:5: replace returns_array -> [u8; 3] with [1; 3]
+src/lib.rs:118:5: replace returns_slice -> &[u8] with Vec::leak(Vec::new())
+src/lib.rs:118:5: replace returns_slice -> &[u8] with Vec::leak(vec![0])
+src/lib.rs:118:5: replace returns_slice -> &[u8] with Vec::leak(vec![1])
+src/lib.rs:122:5: replace returns_ref -> &u8 with Box::leak(Box::new(0))
+src/lib.rs:122:5: replace returns_ref -> &u8 with Box::leak(Box::new(1))
+src/lib.rs:126:5: replace returns_iterator -> impl Iterator<Item = u8> with ::std::iter::empty()
+src/lib.rs:126:5: replace returns_iterator -> impl Iterator<Item = u8> with ::std::iter::once(0)
+src/lib.rs:126:5: replace returns_iterator -> impl Iterator<Item = u8> with ::std::iter::once(1)
+src/lib.rs:138:5: replace returns_custom -> Custom with Default::default()
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::new()
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::from_iter([0])
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::new(0)
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::from(0)
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::from_iter([1])
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::new(1)
+src/lib.rs:142:5: replace returns_generic_wrapper -> Wrapper<u8> with Wrapper::from(1)
+src/lib.rs:152:5: replace body_equals_replacement -> bool with false
+src/lib.rs:200:5: replace calls_with_capacity -> usize with 0
+src/lib.rs:200:5: replace calls_with_capacity -> usize with 1
+src/lib.rs:201:18: replace * with + in calls_with_capacity
+src/lib.rs:201:18: replace * with / in calls_with_capacity
+src/lib.rs:205:5: replace method_with_capacity -> usize with 0

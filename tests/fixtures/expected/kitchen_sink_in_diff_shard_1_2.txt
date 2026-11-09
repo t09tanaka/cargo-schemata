@@ -1,0 +1,5 @@
+src/ops.rs:21:9: replace Counter::is_zero -> bool with false
+src/ops.rs:21:16: replace == with != in Counter::is_zero
+src/nested/deep.rs:2:5: replace deep -> bool with true
+src/nested/deep.rs:2:5: replace deep -> bool with false
+src/nested/deep.rs:2:7: replace >= with < in deep

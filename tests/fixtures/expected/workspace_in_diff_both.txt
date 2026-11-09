@@ -1,0 +1,9 @@
+alpha/src/lib.rs:2:5: replace alpha -> u32 with 0
+alpha/src/lib.rs:2:5: replace alpha -> u32 with 1
+alpha/src/lib.rs:2:7: replace + with - in alpha
+alpha/src/lib.rs:2:7: replace + with * in alpha
+beta/src/lib.rs:2:5: replace beta -> bool with true
+beta/src/lib.rs:2:5: replace beta -> bool with false
+beta/src/lib.rs:2:7: replace > with == in beta
+beta/src/lib.rs:2:7: replace > with < in beta
+beta/src/lib.rs:2:7: replace > with >= in beta

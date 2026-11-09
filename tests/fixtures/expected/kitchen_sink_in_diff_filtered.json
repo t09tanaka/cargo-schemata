@@ -1,0 +1,258 @@
+[
+  {
+    "diff": "--- src/lib.rs\n+++ replace returns_bool -> bool with false\n@@ -22,17 +22,17 @@\n use std::num::{NonZeroI32, NonZeroU32};\n use std::sync::{Arc, Mutex};\n \n pub fn unit_fn() {\n     println!(\"hello\");\n }\n \n pub fn returns_bool() -> bool {\n-    true\n+    false /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn returns_string(a: &str) -> String {\n     a.to_uppercase()\n }\n \n pub fn returns_str() -> &'static str {\n     \"name\"\n",
+    "file": "src/lib.rs",
+    "function": {
+      "function_name": "returns_bool",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 31
+        },
+        "start": {
+          "column": 1,
+          "line": 29
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/lib.rs:30:5: replace returns_bool -> bool with false",
+    "package": "kitchen-sink",
+    "replacement": "false",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 30
+      },
+      "start": {
+        "column": 5,
+        "line": 30
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace add -> u32 with 0\n@@ -1,12 +1,12 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n-    a + b\n+    0 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn is_even(a: u32) -> bool {\n     a % 2 == 0\n }\n \n pub struct Counter {\n     pub n: u32,\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "add",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 5
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/ops.rs:4:5: replace add -> u32 with 0",
+    "package": "kitchen-sink",
+    "replacement": "0",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 4
+      },
+      "start": {
+        "column": 5,
+        "line": 4
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace add -> u32 with 1\n@@ -1,12 +1,12 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n-    a + b\n+    1 /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn is_even(a: u32) -> bool {\n     a % 2 == 0\n }\n \n pub struct Counter {\n     pub n: u32,\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "add",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 5
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/ops.rs:4:5: replace add -> u32 with 1",
+    "package": "kitchen-sink",
+    "replacement": "1",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 4
+      },
+      "start": {
+        "column": 5,
+        "line": 4
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace + with - in add\n@@ -1,12 +1,12 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n-    a + b\n+    a - /* ~ changed by cargo-mutants ~ */ b\n }\n \n pub fn is_even(a: u32) -> bool {\n     a % 2 == 0\n }\n \n pub struct Counter {\n     pub n: u32,\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "add",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 5
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/ops.rs:4:7: replace + with - in add",
+    "package": "kitchen-sink",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 4
+      },
+      "start": {
+        "column": 7,
+        "line": 4
+      }
+    }
+  },
+  {
+    "diff": "--- src/ops.rs\n+++ replace + with * in add\n@@ -1,12 +1,12 @@\n //! A file module declared with `pub mod ops;` in the library root.\n \n pub fn add(a: u32, b: u32) -> u32 {\n-    a + b\n+    a * /* ~ changed by cargo-mutants ~ */ b\n }\n \n pub fn is_even(a: u32) -> bool {\n     a % 2 == 0\n }\n \n pub struct Counter {\n     pub n: u32,\n",
+    "file": "src/ops.rs",
+    "function": {
+      "function_name": "add",
+      "return_type": "-> u32",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 5
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/ops.rs:4:7: replace + with * in add",
+    "package": "kitchen-sink",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 4
+      },
+      "start": {
+        "column": 7,
+        "line": 4
+      }
+    }
+  },
+  {
+    "diff": "--- src/nested/deep.rs\n+++ replace deep -> bool with true\n@@ -1,10 +1,10 @@\n pub fn deep(a: u32) -> bool {\n-    a >= 10\n+    true /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     #[test]\n     fn deep_works() {\n         assert!(super::deep(11));\n     }\n",
+    "file": "src/nested/deep.rs",
+    "function": {
+      "function_name": "deep",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/nested/deep.rs:2:5: replace deep -> bool with true",
+    "package": "kitchen-sink",
+    "replacement": "true",
+    "span": {
+      "end": {
+        "column": 12,
+        "line": 2
+      },
+      "start": {
+        "column": 5,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- src/nested/deep.rs\n+++ replace deep -> bool with false\n@@ -1,10 +1,10 @@\n pub fn deep(a: u32) -> bool {\n-    a >= 10\n+    false /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     #[test]\n     fn deep_works() {\n         assert!(super::deep(11));\n     }\n",
+    "file": "src/nested/deep.rs",
+    "function": {
+      "function_name": "deep",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/nested/deep.rs:2:5: replace deep -> bool with false",
+    "package": "kitchen-sink",
+    "replacement": "false",
+    "span": {
+      "end": {
+        "column": 12,
+        "line": 2
+      },
+      "start": {
+        "column": 5,
+        "line": 2
+      }
+    }
+  },
+  {
+    "diff": "--- src/nested/deep.rs\n+++ replace >= with < in deep\n@@ -1,10 +1,10 @@\n pub fn deep(a: u32) -> bool {\n-    a >= 10\n+    a < /* ~ changed by cargo-mutants ~ */ 10\n }\n \n #[cfg(test)]\n mod tests {\n     #[test]\n     fn deep_works() {\n         assert!(super::deep(11));\n     }\n",
+    "file": "src/nested/deep.rs",
+    "function": {
+      "function_name": "deep",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 3
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/nested/deep.rs:2:7: replace >= with < in deep",
+    "package": "kitchen-sink",
+    "replacement": "<",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 2
+      },
+      "start": {
+        "column": 7,
+        "line": 2
+      }
+    }
+  }
+]

@@ -1,0 +1,94 @@
+src/lib.rs:374:11: replace + with -
+src/lib.rs:374:11: replace + with *
+src/lib.rs:379:5: replace const_block -> u32 with 0
+src/lib.rs:379:5: replace const_block -> u32 with 1
+src/lib.rs:379:23: replace * with + in const_block
+src/lib.rs:379:23: replace * with / in const_block
+src/lib.rs:380:7: replace + with - in const_block
+src/lib.rs:380:7: replace + with * in const_block
+src/lib.rs:386:30: replace * with +
+src/lib.rs:386:30: replace * with /
+src/lib.rs:394:9: replace Holder::build -> u32 with 0
+src/lib.rs:394:9: replace Holder::build -> u32 with 1
+src/lib.rs:394:11: replace * with + in Holder::build
+src/lib.rs:394:11: replace * with / in Holder::build
+src/lib.rs:398:9: replace Holder::const_method -> u32 with 0
+src/lib.rs:398:9: replace Holder::const_method -> u32 with 1
+src/lib.rs:398:11: replace - with + in Holder::const_method
+src/lib.rs:398:11: replace - with / in Holder::const_method
+src/lib.rs:411:9: replace Holder::nested_return -> Vec<Option<String>> with vec![]
+src/lib.rs:411:9: replace Holder::nested_return -> Vec<Option<String>> with vec![None]
+src/lib.rs:411:9: replace Holder::nested_return -> Vec<Option<String>> with vec![Some(String::new())]
+src/lib.rs:411:9: replace Holder::nested_return -> Vec<Option<String>> with vec![Some("xyzzy".into())]
+src/lib.rs:416:26: replace + with -
+src/lib.rs:416:26: replace + with *
+src/lib.rs:421:9: replace Shape::describe -> String with String::new()
+src/lib.rs:421:9: replace Shape::describe -> String with "xyzzy".into()
+src/lib.rs:435:26: replace + with -
+src/lib.rs:435:26: replace + with *
+src/lib.rs:438:9: replace <impl Shape for Holder>::area -> f64 with 0.0
+src/lib.rs:438:9: replace <impl Shape for Holder>::area -> f64 with 1.0
+src/lib.rs:438:9: replace <impl Shape for Holder>::area -> f64 with -1.0
+src/lib.rs:438:13: replace + with - in <impl Shape for Holder>::area
+src/lib.rs:438:13: replace + with * in <impl Shape for Holder>::area
+src/lib.rs:444:9: replace <impl Shape for Wrapper<T>>::area -> f64 with 0.0
+src/lib.rs:444:9: replace <impl Shape for Wrapper<T>>::area -> f64 with 1.0
+src/lib.rs:444:9: replace <impl Shape for Wrapper<T>>::area -> f64 with -1.0
+src/lib.rs:444:13: replace * with + in <impl Shape for Wrapper<T>>::area
+src/lib.rs:444:13: replace * with / in <impl Shape for Wrapper<T>>::area
+src/lib.rs:450:9: replace <impl Shape for &'a[T]>::area -> f64 with 0.0
+src/lib.rs:450:9: replace <impl Shape for &'a[T]>::area -> f64 with 1.0
+src/lib.rs:450:9: replace <impl Shape for &'a[T]>::area -> f64 with -1.0
+src/lib.rs:450:27: replace - with + in <impl Shape for &'a[T]>::area
+src/lib.rs:450:27: replace - with / in <impl Shape for &'a[T]>::area
+src/lib.rs:463:9: replace <impl std::fmt::Display for Holder>::fmt -> std::fmt::Result with Ok(Default::default())
+src/lib.rs:483:9: replace inline::in_inline_module -> u32 with 0
+src/lib.rs:483:9: replace inline::in_inline_module -> u32 with 1
+src/lib.rs:483:11: replace + with - in inline::in_inline_module
+src/lib.rs:483:11: replace + with * in inline::in_inline_module
+src/lib.rs:488:13: replace inline::deeper::in_deeper_module -> bool with true
+src/lib.rs:488:13: replace inline::deeper::in_deeper_module -> bool with false
+src/lib.rs:488:15: replace > with == in inline::deeper::in_deeper_module
+src/lib.rs:488:15: replace > with < in inline::deeper::in_deeper_module
+src/lib.rs:488:15: replace > with >= in inline::deeper::in_deeper_module
+src/lib.rs:500:5: replace uses_macro -> u32 with 0
+src/lib.rs:500:5: replace uses_macro -> u32 with 1
+src/lib.rs:500:21: replace + with - in uses_macro
+src/lib.rs:500:21: replace + with * in uses_macro
+src/nested/mod.rs:4:5: replace shallow -> u32 with 0
+src/nested/mod.rs:4:5: replace shallow -> u32 with 1
+src/nested/mod.rs:4:7: replace - with + in shallow
+src/nested/mod.rs:4:7: replace - with / in shallow
+src/ops.rs:4:5: replace add -> u32 with 0
+src/ops.rs:4:5: replace add -> u32 with 1
+src/ops.rs:4:7: replace + with - in add
+src/ops.rs:4:7: replace + with * in add
+src/ops.rs:8:5: replace is_even -> bool with true
+src/ops.rs:8:5: replace is_even -> bool with false
+src/ops.rs:8:11: replace == with != in is_even
+src/ops.rs:8:7: replace % with / in is_even
+src/ops.rs:8:7: replace % with + in is_even
+src/ops.rs:17:9: replace Counter::bump with ()
+src/ops.rs:17:16: replace += with -= in Counter::bump
+src/ops.rs:17:16: replace += with *= in Counter::bump
+src/ops.rs:21:9: replace Counter::is_zero -> bool with true
+src/ops.rs:21:9: replace Counter::is_zero -> bool with false
+src/ops.rs:21:16: replace == with != in Counter::is_zero
+src/crlf.rs:4:5: replace crlf_fn -> u32 with 0
+src/crlf.rs:4:5: replace crlf_fn -> u32 with 1
+src/crlf.rs:5:10: replace > with == in crlf_fn
+src/crlf.rs:5:10: replace > with < in crlf_fn
+src/crlf.rs:5:10: replace > with >= in crlf_fn
+src/crlf.rs:5:18: replace + with - in crlf_fn
+src/crlf.rs:5:18: replace + with * in crlf_fn
+src/crlf.rs:9:5: replace crlf_match -> u8 with 0
+src/crlf.rs:9:5: replace crlf_match -> u8 with 1
+src/crlf.rs:10:9: delete match arm 0 in crlf_match
+src/crlf.rs:11:9: delete match arm 1 in crlf_match
+src/renamed_file.rs:2:5: replace renamed -> u32 with 0
+src/renamed_file.rs:2:5: replace renamed -> u32 with 1
+src/renamed_file.rs:2:7: replace * with + in renamed
+src/renamed_file.rs:2:7: replace * with / in renamed
+src/nested/deep.rs:2:5: replace deep -> bool with true
+src/nested/deep.rs:2:5: replace deep -> bool with false
+src/nested/deep.rs:2:7: replace >= with < in deep
