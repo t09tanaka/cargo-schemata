@@ -121,7 +121,7 @@ impl Mutant {
     pub fn mutated_code(&self) -> String {
         self.span.replace(
             &self.code,
-            &format!("{} {}", &self.replacement, MUTATION_MARKER_COMMENT),
+            &format!("{} {}", self.replacement, MUTATION_MARKER_COMMENT),
         )
     }
 
