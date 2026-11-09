@@ -22,6 +22,10 @@ pub struct Package {
     pub relative_dir: Utf8PathBuf,
     /// The root source files of the mutated targets, relative to the workspace root.
     pub top_sources: Vec<Utf8PathBuf>,
+    /// The root source files of every target that compiles package code
+    /// (libraries, binaries, tests, examples, benches), relative to the
+    /// workspace root. The build stage injects its runtime module into each.
+    pub all_sources: Vec<Utf8PathBuf>,
 }
 
 impl Package {
@@ -38,6 +42,7 @@ impl Package {
         Some(Package {
             name: package_metadata.name.to_string(),
             top_sources: package_top_sources(workspace_root, package_metadata),
+            all_sources: package_all_sources(workspace_root, package_metadata),
             relative_dir,
         })
     }
@@ -57,6 +62,23 @@ fn package_top_sources(
             found.push(relpath.to_owned());
         }
     }
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// The root files of all targets except build scripts.
+fn package_all_sources(
+    workspace_root: &Utf8Path,
+    package_metadata: &cargo_metadata::Package,
+) -> Vec<Utf8PathBuf> {
+    let mut found: Vec<Utf8PathBuf> = package_metadata
+        .targets
+        .iter()
+        .filter(|t| !t.kind.iter().any(|k| matches!(k, TargetKind::CustomBuild)))
+        .filter_map(|t| t.src_path.strip_prefix(workspace_root).ok())
+        .map(ToOwned::to_owned)
+        .collect();
     found.sort();
     found.dedup();
     found
@@ -102,6 +124,11 @@ pub struct Workspace {
 impl Workspace {
     pub fn root(&self) -> &Utf8Path {
         &self.metadata.workspace_root
+    }
+
+    /// Cargo's target directory for this workspace.
+    pub fn target_dir(&self) -> &Utf8Path {
+        &self.metadata.target_directory
     }
 
     pub fn open(start_dir: &Utf8Path) -> Result<Self> {

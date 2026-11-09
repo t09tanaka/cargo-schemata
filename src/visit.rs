@@ -960,6 +960,7 @@ mod test {
             name: "t".into(),
             relative_dir: Utf8PathBuf::new(),
             top_sources: vec!["src/lib.rs".into()],
+            all_sources: vec!["src/lib.rs".into()],
         });
         SourceFile {
             package,
@@ -1151,6 +1152,7 @@ mod test {
             name: "kitchen-sink".into(),
             relative_dir: Utf8PathBuf::new(),
             top_sources: vec!["src/lib.rs".into(), "src/bin/tool.rs".into()],
+            all_sources: vec!["src/lib.rs".into(), "src/bin/tool.rs".into()],
         });
         let options = Options::new(&Filters::default(), &Config::default()).unwrap();
         let mutants = walk_tree(&root, &[package], &options).unwrap();

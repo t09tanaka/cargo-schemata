@@ -2,7 +2,7 @@
 
 Mutation testing for Rust that builds mutants once, as schemata.
 
-**Status: under development.** Only listing the mutants works so far (`--list`).
+**Status: under development.** Listing the mutants (`--list`) and building them (`--build-only`) work so far; running the tests does not.
 
 ## Goal
 
@@ -15,7 +15,8 @@ mutation at runtime.
 ## Usage
 
 ```
-cargo schemata --list [--json] [options] [-- <test args>]
+cargo schemata --list [--json] [options]
+cargo schemata --build-only [--json] [options] [-- <cargo args>]
 cargo schemata --version | --help
 ```
 
@@ -38,7 +39,8 @@ static initializers are listed like any other code.
 
 | Option                       | Meaning                                                                                  |
 | ---------------------------- | ---------------------------------------------------------------------------------------- |
-| `--list`                     | List the mutants. Required for now: nothing else is implemented yet                      |
+| `--list`                     | List the mutants                                                                         |
+| `--build-only`               | Rewrite and build the mutants once, and report how each was built (see below)            |
 | `--json`                     | Print JSON, as `cargo mutants --list --json` does                                        |
 | `-f`, `--file <glob>`        | Examine only files matching a glob; may be repeated. A glob with a `/` matches the whole path, one without matches a file or directory name anywhere |
 | `-e`, `--exclude <glob>`     | Leave out files matching a glob; applied after `--file`                                  |
@@ -52,7 +54,7 @@ static initializers are listed like any other code.
 | `--skip-calls <names>`       | Skip calls to these functions and methods (comma separated)                              |
 | `--skip-calls-defaults <bool>` | Skip `with_capacity` as well. Default: true                                            |
 | `--config <file>`, `--no-config` | Read another configuration file, or none                                             |
-| `-- <test args>`             | Accepted and ignored by `--list`                                                         |
+| `-- <cargo args>`            | Passed to `cargo check` and `cargo test --no-run` by `--build-only` (such as `--lib`); ignored by `--list` |
 
 `.cargo/mutants.toml` is read like cargo-mutants does: `examine_globs`,
 `exclude_globs`, `examine_re`, `exclude_re`, `skip_calls`,
@@ -83,3 +85,24 @@ same.
 ## License
 
 MIT. See `LICENSE` and `NOTICE`.
+
+## Building (`--build-only`)
+
+The package is copied (without `target/` and `.git`) to `<target dir>/schemata/work`, always the
+same path, so that Cargo's incremental state is reused. Your source tree is never written to.
+Every target's root file gets a small module, `__schemata`, that reads
+`CARGO_SCHEMATA_MUTANT` once; mutants are `if`-switches on it:
+
+- a function body: `if crate::__schemata::on(N) { return <value>; }` in front of the original body;
+- an operator or a match guard: `(if on(N1) { mutant1 } else if on(N2) { mutant2 } else { original })`,
+  with the other mutants of the operands inside each copy;
+- a deleted match arm: `Pattern if !on(N) => ...`.
+
+`cargo check --tests` then finds the mutants that do not compile; their error spans are mapped to
+the mutant that produced them (bisecting when a span maps to none), those mutants are taken out,
+and the rest is built once with `cargo test --no-run`. Mutants whose failure may come from the
+switch itself (type mismatches and the like) and mutants that cannot be switched (const contexts,
+let-chain `&&`, deleted struct fields) are built one at a time in `<target dir>/schemata/single-work`.
+Builds use `--cap-lints=warn`, so lints like `unreachable_code` or `#![deny(warnings)]` do not
+matter. `--build-only` prints the three groups (embedded, single, unviable) and the time of each
+stage; `--json` adds the test binaries with the working directory and environment to run them in.
