@@ -314,7 +314,7 @@ file). Without the variable the module costs what it did.
 When a failed test is reported (`test <name> ... FAILED`), the processes of the
 mutant are killed and the mutant is *caught*; libtest decides, so `should_panic`
 and `catch_unwind` are handled. This is not done when the arguments change the
-format (`--format`, `-q`, `--color`).
+format or let tests write into it (`--format`, `-q`, `--color`, `--nocapture`, `--show-output`); routing still applies.
 
 Limits: tracing is given up, with one line on stderr, when it takes more than
 ten times the baseline (at least a minute); a binary whose output is not
