@@ -37,9 +37,20 @@ pub struct Finished {
     pub early: bool,
 }
 
-/// A line of libtest's pretty output that reports a failed test.
+/// A line of libtest's pretty output that reports a failed test. With
+/// `--report-time` the line ends with the time, as in `... FAILED <0.012s>`.
 pub fn is_failed_line(line: &str) -> bool {
-    line.starts_with("test ") && line.ends_with(" ... FAILED")
+    if !line.starts_with("test ") {
+        return false;
+    }
+    if line.ends_with(" ... FAILED") {
+        return true;
+    }
+    line.rsplit_once(" ... FAILED ").is_some_and(|(_, time)| {
+        time.strip_prefix('<')
+            .and_then(|t| t.strip_suffix("s>"))
+            .is_some_and(|t| !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit() || b == b'.'))
+    })
 }
 
 fn watch(r: impl Read + Send + 'static, hit: Arc<AtomicBool>) -> std::thread::JoinHandle<Vec<u8>> {
@@ -193,6 +204,16 @@ mod tests {
             .process_group(0)
             .spawn()
             .unwrap()
+    }
+
+    #[test]
+    fn failed_lines_are_recognized_with_and_without_the_time() {
+        assert!(is_failed_line("test a::b ... FAILED"));
+        assert!(is_failed_line("test a::b ... FAILED <0.012s>"));
+        assert!(!is_failed_line("test a::b ... ok <0.012s>"));
+        assert!(!is_failed_line("test a::b ... FAILED <soon>"));
+        assert!(!is_failed_line("test a::b ... FAILED later"));
+        assert!(!is_failed_line("a child said ... FAILED"));
     }
 
     #[test]

@@ -316,6 +316,13 @@ mutant are killed and the mutant is *caught*; libtest decides, so `should_panic`
 and `catch_unwind` are handled. This is not done when the arguments change the
 format or let tests write into it (`--format`, `-q`, `--color`, `--nocapture`, `--show-output`); routing still applies.
 
+The line is also recognised with `--report-time` (`... FAILED <0.012s>`). The
+output of the test binary is read as a whole, so a test that starts a child
+process which inherits stdout and prints such a line itself (a test of a test
+runner, say) ends the mutant early as *caught*, though no test of the crate
+failed. With `--no-routing` nothing is watched, so this cannot happen there.
+
+
 Limits: tracing is given up, with one line on stderr, when it takes more than
 ten times the baseline (at least a minute); a binary whose output is not
 libtest's (`harness = false` with its own `main`) or whose tests do not all
@@ -332,6 +339,8 @@ the old behaviour (every test, no early end):
   against the writer alone, and may be missed.
 - Tests whose path depends on randomness, time or a property-test seed: another
   run may not reach a mutant that the traced run reached, or the reverse.
+- A child process of a test that inherits stdout and prints a line like
+  `test x ... FAILED` ends the mutant early as caught (see above).
 - A mutant that makes the tests hang after one of them has failed is a
   `timeout` without routing and *caught* with it.
 
