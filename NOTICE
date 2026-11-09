@@ -2,7 +2,11 @@ cargo-schemata
 Copyright (c) 2026 Takuto Tanaka
 
 This project ports its mutation rules (exclusions, operators,
-replacement values, and name formatting) from cargo-mutants.
+replacement values, and name formatting) and its rule for the time limit
+of a mutant (`src/timeouts.rs`) from cargo-mutants.
+
+The fixture crates under `tests/fixtures` are original. The files in
+`tests/fixtures/expected` are the output of cargo-mutants 27.1.0 on them.
 
 cargo-mutants
 Copyright (c) Martin Pool

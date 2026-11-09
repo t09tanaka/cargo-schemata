@@ -1,11 +1,17 @@
 [package]
 name = "cargo-schemata"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT"
 description = "Mutation testing for Rust that builds mutants once, as schemata."
 repository = "https://github.com/t09tanaka/cargo-schemata"
+homepage = "https://github.com/t09tanaka/cargo-schemata"
+documentation = "https://github.com/t09tanaka/cargo-schemata#readme"
+readme = "README.md"
+keywords = ["mutation-testing", "testing", "cargo-subcommand", "mutants", "schemata"]
+categories = ["development-tools::testing", "development-tools::cargo-plugins"]
+exclude = [".github", "scripts"]
 
 [[bin]]
 name = "cargo-schemata"

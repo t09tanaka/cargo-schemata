@@ -315,7 +315,16 @@ fn tests_that_fail_without_a_mutant_stop_the_run() {
 
 #[test]
 fn an_interrupted_run_stops_its_children_and_writes_nothing() {
-    let kit = Kit::new("int");
+    interrupted_by(libc::SIGTERM, 143, "int");
+}
+
+#[test]
+fn a_hangup_ends_the_run_like_any_other_interruption() {
+    interrupted_by(libc::SIGHUP, 129, "hup");
+}
+
+fn interrupted_by(signal: i32, code: i32, name: &str) {
+    let kit = Kit::new(name);
     let mut child = kit
         .command(&["-j", "1", "--timeout", "3"])
         .stdout(Stdio::piped())
@@ -335,9 +344,9 @@ fn an_interrupted_run_stops_its_children_and_writes_nothing() {
         }
     }
     // SAFETY: plain signal to our own child.
-    unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+    unsafe { libc::kill(child.id() as i32, signal) };
     let status = wait(child, Duration::from_secs(60));
-    assert_eq!(status.code(), Some(143));
+    assert_eq!(status.code(), Some(code));
     assert!(!kit.out.join("report.json").exists());
     kit.assert_no_children_left();
 }

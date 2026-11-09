@@ -192,8 +192,6 @@ fn print_problems(lines: &[String]) {
 /// Puts the parts together and writes the output. The exit code: 0, 1 if a mutant
 /// was missed or the parts are not the parts of one run (nothing is written then).
 pub fn merge(paths: &[Utf8PathBuf], out_dir: &Path, json: bool) -> Result<i32> {
-    // Nothing old may be read as the result.
-    results::clear_output(out_dir)?;
     let mut parts = Vec::new();
     let mut bad = Vec::new();
     for path in paths {
@@ -202,6 +200,9 @@ pub fn merge(paths: &[Utf8PathBuf], out_dir: &Path, json: bool) -> Result<i32> {
             Err(e) => bad.push(e),
         }
     }
+    // Nothing old may be read as the result. Only now: `out_dir` may be the
+    // directory of a part, which has to be read first.
+    results::clear_output(out_dir)?;
     if bad.is_empty() {
         bad = problems(&parts);
     }

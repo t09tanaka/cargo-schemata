@@ -28,7 +28,28 @@ pub const MUTANT_ENV: &str = "CARGO_SCHEMATA_MUTANT";
 /// Errors with these codes can be caused by the embedding rather than by the
 /// mutation itself, so such mutants get a build of their own. Syntax errors
 /// (no code) are included.
-const EMBEDDING_SUSPECT_CODES: &[&str] = &["E0308", "E0282", "E0283", "E0015", "E0658"];
+const EMBEDDING_SUSPECT_CODES: &[&str] = &[
+    "E0308", "E0282", "E0283", "E0284", "E0015", "E0658", "E0689", "E0716", "E0597",
+];
+
+/// Whether an error with this code (none for a syntax error) may come from
+/// the embedding rather than from the mutation.
+fn embedding_suspect(code: Option<&str>) -> bool {
+    code.is_none_or(|c| EMBEDDING_SUSPECT_CODES.contains(&c))
+}
+
+/// Why a build of a single mutant did not produce binaries: `Ok(None)` when it
+/// did, `Ok(Some(why))` when the mutant does not compile. A failure without a
+/// single rustc error is the environment's, not the mutant's.
+fn single_failure(run: &Run) -> Result<Option<String>> {
+    if let Some(first) = run.errors.first() {
+        return Ok(Some(first.describe()));
+    }
+    if !run.success {
+        bail!("cargo failed without a diagnostic:\n{}", tail(&run.stderr));
+    }
+    Ok(None)
+}
 
 pub struct BuildOptions {
     /// Extra arguments for cargo (what follows `--`), such as `--lib`.
@@ -515,9 +536,7 @@ pub fn prepare(
                 single_why.insert(id, "run budget exhausted".into());
             }
             Cause::Error((code, message)) => {
-                let suspect = code
-                    .as_deref()
-                    .is_none_or(|c| EMBEDDING_SUSPECT_CODES.contains(&c));
+                let suspect = embedding_suspect(code.as_deref());
                 let text = match &code {
                     Some(c) => format!("{c}: {message}"),
                     None => message,
@@ -631,12 +650,7 @@ impl SingleBuilder {
             &ov,
         )?;
         let run = self.cargo.run(Phase::Build)?;
-        if !run.success || !run.errors.is_empty() {
-            let why = run
-                .errors
-                .first()
-                .map(Diag::describe)
-                .unwrap_or_else(|| tail(&run.stderr));
+        if let Some(why) = single_failure(&run)? {
             return Ok(Single::Unviable(why));
         }
         if self.meta.is_none() {
@@ -828,4 +842,48 @@ fn binaries(
         });
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn run(success: bool, errors: Vec<Diag>) -> Run {
+        Run {
+            success,
+            errors,
+            artifacts: Vec::new(),
+            stderr: "boom".into(),
+        }
+    }
+
+    fn error(code: Option<&str>) -> Diag {
+        Diag {
+            code: code.map(str::to_owned),
+            message: "m".into(),
+            spans: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn lifetime_and_inference_errors_are_suspected_of_the_embedding() {
+        for code in ["E0284", "E0689", "E0716", "E0597", "E0308", "E0282"] {
+            assert!(embedding_suspect(Some(code)), "{code}");
+        }
+        assert!(embedding_suspect(None), "syntax errors have no code");
+        assert!(!embedding_suspect(Some("E0425")));
+    }
+
+    #[test]
+    fn a_single_build_that_fails_without_a_diagnostic_is_an_error() {
+        let e = single_failure(&run(false, Vec::new())).unwrap_err();
+        assert!(e.to_string().contains("without a diagnostic"), "{e}");
+    }
+
+    #[test]
+    fn a_single_build_with_errors_is_unviable_and_a_clean_one_is_fine() {
+        let why = single_failure(&run(false, vec![error(Some("E0425"))])).unwrap();
+        assert_eq!(why.as_deref(), Some("E0425: m"));
+        assert_eq!(single_failure(&run(true, Vec::new())).unwrap(), None);
+    }
 }

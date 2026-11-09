@@ -206,6 +206,21 @@ fn all_parts_merged_are_the_whole_run() {
 }
 
 #[test]
+fn the_output_may_be_the_directory_of_a_part() {
+    let kit = Kit::new("inplace");
+    for k in 0..2 {
+        kit.run(&format!("part{k}"), &["--shard", &format!("{k}/2")]);
+    }
+    let parts = vec![kit.part("part0"), kit.part("part1")];
+    // part0's report is read before its directory is cleared for the output
+    let (code, _, stderr) = kit.merge("part0", &parts, &[]);
+    assert_eq!(code, 1, "{stderr}");
+    assert!(stderr.contains("2 part(s) merged"), "{stderr}");
+    let merged = kit.report("part0");
+    assert!(merged.get("config").is_none(), "the merged report is whole");
+}
+
+#[test]
 fn parts_that_are_not_all_the_parts_of_one_run_are_refused() {
     let kit = Kit::new("refuse");
     for k in 0..2 {

@@ -51,6 +51,9 @@ fn sync_dir(
             }
             fs::create_dir_all(&dst_path)?;
             sync_dir(src_root, dst_root, &rel_path, exclude, overrides)?;
+        } else if let Some(text) = overrides.get(&rel_path) {
+            wanted.insert(name);
+            write_if_changed(&dst_path, text)?;
         } else if meta.file_type().is_symlink() {
             wanted.insert(name);
             let target = fs::read_link(&src_path)?;
@@ -59,9 +62,6 @@ fn sync_dir(
                 #[cfg(unix)]
                 std::os::unix::fs::symlink(&target, &dst_path)?;
             }
-        } else if let Some(text) = overrides.get(&rel_path) {
-            wanted.insert(name);
-            write_if_changed(&dst_path, text)?;
         } else {
             wanted.insert(name);
             let mtime = meta.modified()?;
@@ -162,6 +162,38 @@ mod tests {
         sync_tree(&src, &dst, &[], &Overrides::new()).unwrap();
         let m2 = fs::metadata(dst.join("a.txt")).unwrap().modified().unwrap();
         assert_eq!(m1, m2);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_override_wins_over_a_symlink() {
+        let root = tmp("c");
+        let (src, dst) = (root.join("src"), root.join("dst"));
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("real.txt"), "real").unwrap();
+        std::os::unix::fs::symlink("real.txt", src.join("link.txt")).unwrap();
+        // first without, so that dst holds a symlink, then with the override
+        sync_tree(&src, &dst, &[], &Overrides::new()).unwrap();
+        assert!(
+            dst.join("link.txt")
+                .symlink_metadata()
+                .unwrap()
+                .is_symlink()
+        );
+        let mut ov = Overrides::new();
+        ov.insert(PathBuf::from("link.txt"), "generated".into());
+        sync_tree(&src, &dst, &[], &ov).unwrap();
+        assert_eq!(
+            fs::read_to_string(dst.join("link.txt")).unwrap(),
+            "generated"
+        );
+        assert!(
+            !dst.join("link.txt")
+                .symlink_metadata()
+                .unwrap()
+                .is_symlink()
+        );
+        assert_eq!(fs::read_to_string(dst.join("real.txt")).unwrap(), "real");
         let _ = fs::remove_dir_all(&root);
     }
 }
