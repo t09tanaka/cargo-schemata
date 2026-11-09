@@ -1,14 +1,19 @@
 //! cargo-schemata: mutation testing for Rust that builds mutants once, as schemata.
 //!
-//! This stage lists the mutants; rewriting, building and running them come later.
+//! This stage lists the mutants and builds them (`--build-only`); running them comes later.
 
+mod diag;
 mod fnvalue;
 mod list;
 mod mutant;
 mod options;
 mod path;
+mod prepare;
 mod pretty;
+mod report;
+mod rewrite;
 mod span;
+mod sync;
 mod visit;
 mod workspace;
 
@@ -29,7 +34,11 @@ struct Args {
     #[arg(long, help_heading = "Output")]
     list: bool,
 
-    /// Output json (only for --list).
+    /// Rewrite and build the mutants, and report how each was built, without running tests.
+    #[arg(long, conflicts_with = "list", help_heading = "Output")]
+    build_only: bool,
+
+    /// Output json (with --list or --build-only).
     #[arg(long, help_heading = "Output")]
     json: bool,
 
@@ -99,8 +108,8 @@ struct Args {
     #[arg(long, help_heading = "Config")]
     no_config: bool,
 
-    /// Arguments for the test runner. Accepted for compatibility; they do not
-    /// affect `--list`.
+    /// Arguments for cargo when building, such as `--lib` (as in cargo-mutants).
+    /// They do not affect `--list`.
     #[arg(last = true)]
     test_args: Vec<String>,
 }
@@ -156,16 +165,26 @@ fn run(args: &Args) -> Result<String> {
     let packages = workspace.select(&package_filter)?;
     let mutants = visit::walk_tree(workspace.root(), &packages, &options)
         .context("failed to discover mutants")?;
+    if args.build_only {
+        let prepared = prepare::prepare(
+            &workspace,
+            &packages,
+            &mutants,
+            &prepare::BuildOptions {
+                cargo_args: args.test_args.clone(),
+                ..Default::default()
+            },
+        )
+        .context("failed to build mutants")?;
+        return Ok(report::report(&mutants, &prepared, args.json));
+    }
     Ok(list::list_mutants(&mutants, args.json))
 }
 
 fn main() -> ExitCode {
     let args = Args::parse_from(strip_subcommand(std::env::args().collect()));
-    if !args.list {
-        eprintln!("error: only `--list` is supported so far; pass --list");
-        return ExitCode::from(2);
-    }
-    if args.json && !args.list {
+    if !args.list && !args.build_only {
+        eprintln!("error: only `--list` and `--build-only` are supported so far");
         return ExitCode::from(2);
     }
     match run(&args) {
