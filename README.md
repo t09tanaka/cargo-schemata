@@ -2,7 +2,7 @@
 
 Mutation testing for Rust that builds mutants once, as schemata.
 
-**Status: under development.** Listing the mutants (`--list`), building them (`--build-only`) and running the tests on them (a plain `cargo schemata`) work. Also there: `--in-diff` (only the code a diff changes), and `--shard` with `merge` (a run in several parts). Not yet: `--html`, and results reused from an earlier run.
+**Status: 0.1.0, the first release.** Listing the mutants (`--list`), building them (`--build-only`) and running the tests on them (a plain `cargo schemata`) work, and so do `--in-diff` (only the code a diff changes) and `--shard` with `merge` (a run in several parts). Unix only: Linux and macOS (Windows is not supported). There is no `--html`, and results of an earlier run are not reused (see "Differences from cargo-mutants").
 
 ## Goal
 
@@ -11,6 +11,24 @@ rebuilding the project for every mutant, it rewrites the sources once,
 embedding every mutation behind an `if` (a "mutation schema"), builds once,
 and then runs the test binary in one process per mutant, selecting the active
 mutation at runtime.
+
+## How long it takes
+
+On a command-line tool of ours (about 550 mutants, one of the tests waits a
+little over two seconds), on a Mac with 12 cores:
+
+| Tool                                | Time          |
+| ----------------------------------- | ------------- |
+| cargo-mutants 27.1.0                | about 80 min  |
+| cargo-schemata, first run           | about 40 s    |
+| cargo-schemata, second run          | about 25 s    |
+| cargo-schemata with `--no-routing`  | about 7 min   |
+
+The list of the four outcomes (caught, missed, timeout, unviable) was the same,
+mutant by mutant. How it gets there: the sources are rewritten and built once
+(see "Building"), a trace of which test reaches which mutant decides what runs
+for each of them, and a mutant is caught at its first failed test (see
+"Routing"). `--no-routing` turns the last two off and keeps the single build.
 
 ## Usage
 
@@ -180,30 +198,6 @@ cannot replace the code (the `&&` of a let chain, a deleted match arm or struct 
 expressions can be embedded in a single build; the others have to be built one
 at a time.
 
-## Tests
-
-`tests/fixtures` holds small crates. `tests/fixtures/expected` is what
-`cargo mutants --list` printed for them (`tests/fixtures/cases.json` lists the
-invocations), and `cargo test` checks that `cargo schemata --list` prints the
-same.
-
-To rebuild the expected files (a new case in `cases.json`, or another version of
-cargo-mutants), install the version the tests compare with and run the script from
-the root of this repository, then commit what changed:
-
-```bash
-cargo install cargo-mutants --version 27.1.0 --locked
-python3 scripts/gen-expected.py
-```
-
-`--in-diff` cases use the diff files in `tests/fixtures/diffs` (`@fixtures@` in a case
-stands for their directory). `cargo test` also runs a fixture crate on all its parts and
-merges them (`tests/shard_merge.rs`), which takes a few minutes the first time.
-
-## License
-
-MIT. See `LICENSE` and `NOTICE`.
-
 ## Building (`--build-only`)
 
 The package is copied (without `target/` and `.git`) to `<target dir>/schemata/work`, always the
@@ -322,7 +316,6 @@ process which inherits stdout and prints such a line itself (a test of a test
 runner, say) ends the mutant early as *caught*, though no test of the crate
 failed. With `--no-routing` nothing is watched, so this cannot happen there.
 
-
 Limits: tracing is given up, with one line on stderr, when it takes more than
 ten times the baseline (at least a minute); a binary whose output is not
 libtest's (`harness = false` with its own `main`) or whose tests do not all
@@ -398,3 +391,27 @@ Doctests are not run (only the test binaries `cargo test --no-run` builds).
 `--html` and reuse of earlier results are not there. `--sharding` (and the `sharding` key) is not either: the division is always the `slice` of cargo-mutants, its default. The
 test processes of the mutants that are built in share one working directory
 (see `-j`).
+
+## Tests
+
+`tests/fixtures` holds small crates. `tests/fixtures/expected` is what
+`cargo mutants --list` printed for them (`tests/fixtures/cases.json` lists the
+invocations), and `cargo test` checks that `cargo schemata --list` prints the
+same.
+
+To rebuild the expected files (a new case in `cases.json`, or another version of
+cargo-mutants), install the version the tests compare with and run the script from
+the root of this repository, then commit what changed:
+
+```bash
+cargo install cargo-mutants --version 27.1.0 --locked
+python3 scripts/gen-expected.py
+```
+
+`--in-diff` cases use the diff files in `tests/fixtures/diffs` (`@fixtures@` in a case
+stands for their directory). `cargo test` also runs a fixture crate on all its parts and
+merges them (`tests/shard_merge.rs`), which takes a few minutes the first time.
+
+## License
+
+MIT. See `LICENSE` and `NOTICE`.
