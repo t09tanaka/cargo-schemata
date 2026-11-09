@@ -28,7 +28,15 @@ pub const MUTANT_ENV: &str = "CARGO_SCHEMATA_MUTANT";
 /// Errors with these codes can be caused by the embedding rather than by the
 /// mutation itself, so such mutants get a build of their own. Syntax errors
 /// (no code) are included.
-const EMBEDDING_SUSPECT_CODES: &[&str] = &["E0308", "E0282", "E0283", "E0015", "E0658"];
+const EMBEDDING_SUSPECT_CODES: &[&str] = &[
+    "E0308", "E0282", "E0283", "E0284", "E0015", "E0658", "E0689", "E0716", "E0597",
+];
+
+/// Whether an error with this code (none for a syntax error) may come from
+/// the embedding rather than from the mutation.
+fn embedding_suspect(code: Option<&str>) -> bool {
+    code.is_none_or(|c| EMBEDDING_SUSPECT_CODES.contains(&c))
+}
 
 /// Why a build of a single mutant did not produce binaries: `Ok(None)` when it
 /// did, `Ok(Some(why))` when the mutant does not compile. A failure without a
@@ -528,9 +536,7 @@ pub fn prepare(
                 single_why.insert(id, "run budget exhausted".into());
             }
             Cause::Error((code, message)) => {
-                let suspect = code
-                    .as_deref()
-                    .is_none_or(|c| EMBEDDING_SUSPECT_CODES.contains(&c));
+                let suspect = embedding_suspect(code.as_deref());
                 let text = match &code {
                     Some(c) => format!("{c}: {message}"),
                     None => message,
@@ -857,6 +863,15 @@ mod tests {
             message: "m".into(),
             spans: Vec::new(),
         }
+    }
+
+    #[test]
+    fn lifetime_and_inference_errors_are_suspected_of_the_embedding() {
+        for code in ["E0284", "E0689", "E0716", "E0597", "E0308", "E0282"] {
+            assert!(embedding_suspect(Some(code)), "{code}");
+        }
+        assert!(embedding_suspect(None), "syntax errors have no code");
+        assert!(!embedding_suspect(Some("E0425")));
     }
 
     #[test]
