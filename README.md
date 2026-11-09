@@ -45,6 +45,7 @@ static initializers are listed like any other code.
 | `--build-only`               | Rewrite and build the mutants once, and report how each was built (see below)            |
 | `--json`                     | Print JSON: the report of a run, or the list as `cargo mutants --list --json` does       |
 | `-j`, `--jobs <n>`           | How many test processes run at a time. Default: a quarter of the processors, at least 1 and at most 4 |
+| `--no-routing`               | Run every test for every mutant, and do not end a run at the first failed test (see "Routing") |
 | `-t`, `--timeout <secs>`     | What one mutant's tests may take. Default: five times the time of the tests without a mutant, at least 20 seconds |
 | `-o`, `--output <dir>`       | Where `report.json` and the `*.txt` lists are written. Default: `schemata.out`           |
 | `-f`, `--file <glob>`        | Examine only files matching a glob; may be repeated. A glob with a `/` matches the whole path, one without matches a file or directory name anywhere |
@@ -231,14 +232,18 @@ A plain `cargo schemata` builds as described above, then:
 1. **Baseline.** Every test binary is started once without a mutant. They have to
    pass: otherwise nothing is run, the end of the output of the failing binary is
    shown, and the exit code is 1. The time of the baseline sets the time limit.
-2. **Each mutant.** The test binaries are started one after the other with
+2. **Routing** (unless `--no-routing`): every test is run once alone to learn
+   which mutants it reaches, so that each mutant is run against those tests only.
+   See "Routing" below.
+3. **Each mutant.** The test binaries are started one after the other with
    `CARGO_SCHEMATA_MUTANT=<id>`, in the working directory and with the
    environment `cargo test` gives them. The first one that exits with a non-zero
    status (or is killed by a signal) *catches* the mutant, and the rest are not
-   started. If all of them exit with 0 the mutant is *missed*. A mutant that
+   started (with routing, only the tests that reach the mutant are run). If all
+   of them exit with 0 the mutant is *missed*. A mutant that
    did not compile is *unviable*. Standard input is closed and the output of the
    tests is discarded.
-3. **Mutants built on their own** (const contexts, `&&` in let chains, deleted
+4. **Mutants built on their own** (const contexts, `&&` in let chains, deleted
    struct fields, and the ones whose type changes) are built and run one at a
    time, each right after its build: the test binaries and the `CARGO_BIN_EXE_*`
    binaries of a build are replaced by the next one. They run after the others,
@@ -248,12 +253,17 @@ What it prints (progress on stdout, or on stderr with `--json`):
 
 ```
 built: 18 mutants in one build, 4 one at a time, 2 unviable (0.8s)
-baseline: tests pass in 1.1s; a mutant gets 3s; 2 job(s)
+baseline: tests pass in 1.1s; a mutant gets 3s; 2 job(s) (1.1s)
+traced: 12 tests run alone, 0 binar(ies) run whole (0.6s)
 src/lib.rs:5:7: replace + with - in add ... caught in 0.0s
 src/lib.rs:10:7: replace * with + in twice ... missed in 0.0s
 src/lib.rs:17:11: replace += with *= in count_to ... timeout in 3.0s
 src/lib.rs:24:18: replace + with * in join ... unviable in 0.0s
+mutants: run in 2.4s
 ```
+
+The parenthesized times are the stages: the build, the baseline, the tracing of
+each test, and the run of the mutants.
 
 When the run ends, the missed mutants, one line each, then the last line, both on
 stderr, or on stdout when nothing is missed:
@@ -275,6 +285,55 @@ cargo schemata: FAILED (17 caught, 4 missed, 1 timeout, 2 unviable in 13.1s)
 
 **There is no score threshold.** The exit code depends on the missed mutants alone.
 `timeout` and `unviable` mutants do not fail the run; the counts show them.
+
+### Routing
+
+Running every test for every mutant wastes most of the time: one slow test, or
+a test suite of a few hundred tests, is paid for again by each of hundreds of
+mutants. All mutants are in one build, so which tests reach a mutant's code
+does not depend on the mutant. The `__schemata` module can record it: with
+`CARGO_SCHEMATA_TRACE=<file>` set, `on(N)` never selects a mutant and appends
+`N` to the file, once per process and id (a bit set, one `O_APPEND` write;
+child processes and several copies of the module in one process share the
+file). Without the variable the module costs what it did.
+
+1. The baseline run records the ids that the tests reach together.
+2. Each test binary is asked for its tests (`<bin> <your filters> --list`) and
+   every test is run alone (`<bin> --exact <name>`, `-j` at a time) with its own
+   record. A mutant that a test reaches alone is run against that test.
+3. A mutant is run with `<bin> --exact a b c`, the tests that reached it, and
+   a binary none of whose tests reached it is not started. Your name filters and
+   `--skip` only choose the tests that are listed; other arguments
+   (`--test-threads`, `--nocapture`, `--ignored`) are kept.
+4. A mutant that no test reaches, even in the baseline, is not run: it is
+   *missed*, `statusReason` of the report says `not reached by any test`, and the
+   terminal says so (`missed (not reached by any test)`).
+5. A mutant the baseline reaches but no test reaches alone (state that an
+   earlier test set up) gets all the tests.
+
+When a failed test is reported (`test <name> ... FAILED`), the processes of the
+mutant are killed and the mutant is *caught*; libtest decides, so `should_panic`
+and `catch_unwind` are handled. This is not done when the arguments change the
+format or let tests write into it (`--format`, `-q`, `--color`, `--nocapture`, `--show-output`); routing still applies.
+
+Limits: tracing is given up, with one line on stderr, when it takes more than
+ten times the baseline (at least a minute); a binary whose output is not
+libtest's (`harness = false` with its own `main`) or whose tests do not all
+pass alone is always run whole; so is a binary when 80% or more of its tests
+reach the mutant, or when the names would make a command line longer than 32 KiB.
+If the baseline records nothing, routing is off.
+
+**Where the result can differ from cargo-mutants**, and `--no-routing` gives
+the old behaviour (every test, no early end):
+
+- A test that only *writes* what another reads through a `static`, a file or an
+  environment variable: the reader fails when the writer ran first in the same
+  process, but run alone, only the writer reaches the mutant. The mutant is run
+  against the writer alone, and may be missed.
+- Tests whose path depends on randomness, time or a property-test seed: another
+  run may not reach a mutant that the traced run reached, or the reverse.
+- A mutant that makes the tests hang after one of them has failed is a
+  `timeout` without routing and *caught* with it.
 
 ### Time limits
 

@@ -20,6 +20,7 @@ mod proc;
 mod report;
 mod results;
 mod rewrite;
+mod route;
 mod shard;
 mod span;
 mod sync;
@@ -75,6 +76,12 @@ struct Args {
     /// processors, at least 1 and at most 4.
     #[arg(long, short = 'j', value_parser = clap::value_parser!(u32).range(1..), help_heading = "Execution")]
     jobs: Option<u32>,
+
+    /// Run every test for every mutant. By default each mutant runs only the
+    /// tests that reach it (found by running each test alone once), and ends as
+    /// soon as a test fails.
+    #[arg(long, help_heading = "Execution")]
+    no_routing: bool,
 
     /// Seconds one mutant's tests may take. Default: five times the time of
     /// the tests without a mutant, at least 20.
@@ -380,10 +387,13 @@ fn run_list_or_build(args: &Args) -> Result<String> {
     Ok(list::list_mutants(&setup.mutants, args.json))
 }
 
+/// Why a mutant was missed without running any test.
+const NOT_REACHED: &str = "not reached by any test";
+
 fn status_of(ran: Ran) -> Status {
     match ran {
         Ran::Caught => Status::Caught,
-        Ran::Missed => Status::Missed,
+        Ran::Missed | Ran::Unreached => Status::Missed,
         Ran::Timeout => Status::Timeout,
     }
 }
@@ -444,12 +454,20 @@ fn run_tests(args: &Args) -> Result<i32> {
             );
         }
         let bin_args = split_test_args(&args.test_args).binary;
+        let route_ok = !args.no_routing;
         let tests = Tests {
             bin_args: &bin_args,
             tmp_root: &tmp_root,
+            early_kill: route_ok && !route::changes_output(&bin_args),
         };
-        let baseline = match tests.baseline(&prepared.test_binaries, explicit)? {
-            Baseline::Passed(took) => took,
+        let trace_file = tmp_root.join("trace-baseline.txt");
+        let t = Instant::now();
+        let (baseline, libtest) = match tests.baseline(
+            &prepared.test_binaries,
+            explicit,
+            route_ok.then_some(trace_file.as_path()),
+        )? {
+            Baseline::Passed { took, libtest } => (took, libtest),
             Baseline::Failed { binary, log_tail } => {
                 eprintln!("{log_tail}");
                 eprintln!(
@@ -468,10 +486,50 @@ fn run_tests(args: &Args) -> Result<i32> {
         let timeout = exec::mutant_timeout(baseline, explicit);
         limit = Some(timeout);
         say(format!(
-            "baseline: tests pass in {:.1}s; a mutant gets {}s; {jobs} job(s)",
+            "baseline: tests pass in {:.1}s; a mutant gets {}s; {jobs} job(s) ({:.1}s)",
             baseline.as_secs_f64(),
-            timeout.as_secs()
+            timeout.as_secs(),
+            t.elapsed().as_secs_f64()
         ));
+        let routing = if route_ok && libtest.iter().any(|&l| l) {
+            let t = Instant::now();
+            let global = route::read_trace(&trace_file);
+            if global.is_empty() {
+                say("routing off: the tests of the baseline reached no mutant, so nothing was recorded"
+                    .to_owned());
+                None
+            } else {
+                match route::trace(
+                    &tests,
+                    &prepared.test_binaries,
+                    &libtest,
+                    global,
+                    jobs,
+                    route::trace_budget(baseline),
+                    timeout,
+                )? {
+                    route::TraceResult::Routing(tr) => {
+                        say(format!(
+                            "traced: {} tests run alone, {} binar(ies) run whole ({:.1}s)",
+                            tr.tests,
+                            tr.whole_binaries,
+                            t.elapsed().as_secs_f64()
+                        ));
+                        Some(tr.routing)
+                    }
+                    route::TraceResult::GaveUp(took) => {
+                        eprintln!(
+                            "cargo schemata: tracing the tests one by one took more than {:.0}s; running every test for each mutant",
+                            took.as_secs_f64()
+                        );
+                        None
+                    }
+                }
+            }
+        } else {
+            None
+        };
+        let t_mutants = Instant::now();
 
         let line = |id: usize, word: &str, took: Duration| {
             say(format!(
@@ -493,9 +551,18 @@ fn run_tests(args: &Args) -> Result<i32> {
             &tests,
             &prepared.test_binaries,
             &prepared.embedded,
-            jobs,
-            timeout,
-            &|id, ran, took| line(id, status_of(ran).word(), took),
+            &exec::Pool {
+                jobs,
+                timeout,
+                routing: routing.as_ref(),
+            },
+            &|id, ran, took| {
+                if ran == Ran::Unreached {
+                    say(format!("{} ... missed ({NOT_REACHED}) in 0.0s", names[&id]));
+                } else {
+                    line(id, status_of(ran).word(), took);
+                }
+            },
             &|r| {
                 say(format!(
                     "{} mutant(s) did not end within {}s and are run again alone",
@@ -508,7 +575,7 @@ fn run_tests(args: &Args) -> Result<i32> {
             id,
             status: status_of(ran),
             duration,
-            reason: None,
+            reason: (ran == Ran::Unreached).then(|| NOT_REACHED.to_owned()),
         }));
         // One at a time, each tested right after its build: the binaries of a
         // build (and the `CARGO_BIN_EXE_*` and working directory they carry)
@@ -536,6 +603,10 @@ fn run_tests(args: &Args) -> Result<i32> {
             line(id, result.status.word(), t.elapsed());
             results.push(result);
         }
+        say(format!(
+            "mutants: run in {:.1}s",
+            t_mutants.elapsed().as_secs_f64()
+        ));
     }
 
     results.sort_by_key(|r| r.id);
@@ -556,7 +627,10 @@ fn run_tests(args: &Args) -> Result<i32> {
     if counts.missed > 0 {
         eprintln!("cargo schemata: {} surviving mutant(s)", counts.missed);
         for r in results.iter().filter(|r| r.status == Status::Missed) {
-            eprintln!("{} (missed)", names[&r.id]);
+            match &r.reason {
+                Some(why) => eprintln!("{} (missed: {why})", names[&r.id]),
+                None => eprintln!("{} (missed)", names[&r.id]),
+            }
         }
         eprintln!(
             "cargo schemata: FAILED ({}{})",

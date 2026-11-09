@@ -12,6 +12,8 @@ use anyhow::{Context, Result};
 use crate::interrupt;
 use crate::prepare::{MUTANT_ENV, TestBinary};
 use crate::proc::{Sink, run_group};
+use crate::rewrite::TRACE_ENV;
+use crate::route::{Plan, Routing};
 
 /// The least time a mutant gets, as in cargo-mutants 27.1.0.
 const MINIMUM_TIMEOUT: Duration = Duration::from_secs(20);
@@ -40,6 +42,17 @@ pub struct Tests<'a> {
     pub bin_args: &'a [String],
     /// Each job gets a directory of its own below this, as `TMPDIR`.
     pub tmp_root: &'a Path,
+    /// End a run as soon as libtest reports a failed test.
+    pub early_kill: bool,
+}
+
+/// One test binary to start for a mutant, and with which arguments.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Step {
+    /// Index into the binaries.
+    pub bin: usize,
+    /// Replaces [`Tests::bin_args`] when set.
+    pub args: Option<Vec<String>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,24 +60,37 @@ pub enum Ran {
     Caught,
     Missed,
     Timeout,
+    /// Not run: no test reaches the mutant's code. Counts as missed.
+    Unreached,
 }
 
 impl Tests<'_> {
-    fn command(&self, bin: &TestBinary, mutant: Option<usize>, tmp: &Path) -> Command {
+    pub fn command(
+        &self,
+        bin: &TestBinary,
+        args: &[String],
+        mutant: Option<usize>,
+        trace: Option<&Path>,
+        tmp: &Path,
+    ) -> Command {
         let mut cmd = Command::new(&bin.path);
-        cmd.args(self.bin_args)
+        cmd.args(args)
             .current_dir(&bin.cwd)
             .env_remove(MUTANT_ENV)
+            .env_remove(TRACE_ENV)
             .envs(bin.env.iter().map(|(k, v)| (k, v)))
             .env("INSTA_UPDATE", "no")
             .env("TMPDIR", tmp);
         if let Some(id) = mutant {
             cmd.env(MUTANT_ENV, id.to_string());
         }
+        if let Some(file) = trace {
+            cmd.env(TRACE_ENV, file);
+        }
         cmd
     }
 
-    fn tmp(&self, job: &str) -> Result<PathBuf> {
+    pub fn tmp(&self, job: &str) -> Result<PathBuf> {
         let tmp = self.tmp_root.join(job);
         std::fs::create_dir_all(&tmp).with_context(|| format!("create {}", tmp.display()))?;
         Ok(tmp)
@@ -80,15 +106,40 @@ impl Tests<'_> {
         job: &str,
         timeout: Option<Duration>,
     ) -> Result<(Ran, Duration)> {
+        let steps: Vec<Step> = (0..bins.len())
+            .map(|bin| Step { bin, args: None })
+            .collect();
+        self.run_steps(bins, &steps, mutant, job, timeout)
+    }
+
+    /// Like [`Tests::run`], for these steps only.
+    pub fn run_steps(
+        &self,
+        bins: &[TestBinary],
+        steps: &[Step],
+        mutant: Option<usize>,
+        job: &str,
+        timeout: Option<Duration>,
+    ) -> Result<(Ran, Duration)> {
         let tmp = self.tmp(job)?;
         let start = Instant::now();
-        for bin in bins {
+        let sink = if self.early_kill {
+            Sink::WatchFailed
+        } else {
+            Sink::Null
+        };
+        for step in steps {
             interrupt::check()?;
             let left = timeout.map(|t| t.saturating_sub(start.elapsed()));
             if left == Some(Duration::ZERO) {
                 return Ok((Ran::Timeout, start.elapsed()));
             }
-            let fin = run_group(&mut self.command(bin, mutant, &tmp), left, &Sink::Null)?;
+            let args = step.args.as_deref().unwrap_or(self.bin_args);
+            let mut cmd = self.command(&bins[step.bin], args, mutant, None, &tmp);
+            let fin = run_group(&mut cmd, left, &sink)?;
+            if fin.early {
+                return Ok((Ran::Caught, start.elapsed()));
+            }
             match fin.status {
                 None => return Ok((Ran::Timeout, start.elapsed())),
                 Some(status) if !status.success() => return Ok((Ran::Caught, start.elapsed())),
@@ -100,21 +151,36 @@ impl Tests<'_> {
 }
 
 pub enum Baseline {
-    Passed(Duration),
-    Failed { binary: String, log_tail: String },
+    Passed {
+        took: Duration,
+        /// Per binary: its output is libtest's (`running N tests`), so it
+        /// understands `--list` and `--exact`.
+        libtest: Vec<bool>,
+    },
+    Failed {
+        binary: String,
+        log_tail: String,
+    },
     TimedOut(String),
 }
 
 impl Tests<'_> {
-    /// Run every binary without a mutant. They have to pass.
-    pub fn baseline(&self, bins: &[TestBinary], limit: Option<Duration>) -> Result<Baseline> {
+    /// Run every binary without a mutant. They have to pass. With `trace`, the
+    /// ids of the mutants the tests reach are appended to that file.
+    pub fn baseline(
+        &self,
+        bins: &[TestBinary],
+        limit: Option<Duration>,
+        trace: Option<&Path>,
+    ) -> Result<Baseline> {
         let tmp = self.tmp("baseline")?;
         let start = Instant::now();
+        let mut libtest = Vec::new();
         for (n, bin) in bins.iter().enumerate() {
             let log = tmp.join(format!("baseline-{n}.log"));
             let left = limit.map(|t| t.saturating_sub(start.elapsed()));
             let fin = run_group(
-                &mut self.command(bin, None, &tmp),
+                &mut self.command(bin, self.bin_args, None, trace, &tmp),
                 left,
                 &Sink::File(log.clone()),
             )?;
@@ -132,14 +198,44 @@ impl Tests<'_> {
                 }
                 Some(_) => {}
             }
+            let text = std::fs::read_to_string(&log).unwrap_or_default();
+            libtest.push(text.lines().any(|l| {
+                l.starts_with("running ") && l.ends_with(" tests") || l == "running 1 test"
+            }));
         }
-        Ok(Baseline::Passed(start.elapsed()))
+        Ok(Baseline::Passed {
+            took: start.elapsed(),
+            libtest,
+        })
+    }
+}
+
+/// Run the tests for one embedded mutant: the ones routing picks, or all.
+fn run_one(
+    tests: &Tests,
+    bins: &[TestBinary],
+    routing: Option<&Routing>,
+    id: usize,
+    job: &str,
+    timeout: Duration,
+) -> Result<(Ran, Duration)> {
+    match routing.map(|r| r.plan(id, bins.len())) {
+        None => tests.run(bins, Some(id), job, Some(timeout)),
+        Some(Plan::Unreached) => Ok((Ran::Unreached, Duration::ZERO)),
+        Some(Plan::Steps(steps)) => tests.run_steps(bins, &steps, Some(id), job, Some(timeout)),
     }
 }
 
 /// How many mutants ended with a time-out run again alone.
 pub struct Rerun {
     pub count: usize,
+}
+
+/// How the mutants are run.
+pub struct Pool<'a> {
+    pub jobs: usize,
+    pub timeout: Duration,
+    pub routing: Option<&'a Routing>,
 }
 
 /// Run the mutants `ids` against the embedded test binaries, `jobs` at a time.
@@ -152,11 +248,15 @@ pub fn run_embedded(
     tests: &Tests,
     bins: &[TestBinary],
     ids: &[usize],
-    jobs: usize,
-    timeout: Duration,
+    pool: &Pool,
     done: &(dyn Fn(usize, Ran, Duration) + Sync),
     rerun_note: &(dyn Fn(Rerun) + Sync),
 ) -> Result<Vec<(usize, Ran, Duration)>> {
+    let Pool {
+        jobs,
+        timeout,
+        routing,
+    } = *pool;
     let next = AtomicUsize::new(0);
     let stop = AtomicBool::new(false);
     let results: Mutex<Vec<(usize, Ran, Duration)>> = Mutex::new(Vec::new());
@@ -169,7 +269,7 @@ pub fn run_embedded(
                 while !stop.load(Ordering::Relaxed) {
                     let i = next.fetch_add(1, Ordering::Relaxed);
                     let Some(&id) = ids.get(i) else { break };
-                    match tests.run(bins, Some(id), &job, Some(timeout)) {
+                    match run_one(tests, bins, routing, id, &job, timeout) {
                         Ok((ran, took)) => {
                             if !(ran == Ran::Timeout && jobs >= 2) {
                                 done(id, ran, took);
@@ -199,7 +299,7 @@ pub fn run_embedded(
             rerun_note(Rerun { count: slow.len() });
         }
         for id in slow {
-            let (ran, took) = tests.run(bins, Some(id), "0", Some(timeout))?;
+            let (ran, took) = run_one(tests, bins, routing, id, "0", timeout)?;
             done(id, ran, took);
             if let Some(r) = results.iter_mut().find(|r| r.0 == id) {
                 *r = (id, ran, took);
@@ -274,6 +374,7 @@ mod tests {
         let tests = Tests {
             bin_args: &args,
             tmp_root: &s.0,
+            early_kill: false,
         };
         tests.run(&[bin], mutant, "0", limit).unwrap()
     }
@@ -320,6 +421,7 @@ mod tests {
             let tests = Tests {
                 bin_args: &args,
                 tmp_root: &s.0.join("tmp"),
+                early_kill: false,
             };
             let (ran, _) = tests.run(&[bin], Some(1), "0", limit).unwrap();
             assert_eq!(
@@ -349,6 +451,37 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_test_line_ends_the_run_and_a_pipe_kept_by_another_session_is_not_waited_for() {
+        let s = Scratch::new("early");
+        let run = |script: &str, early_kill: bool| {
+            let (bin, args) = sh(script);
+            let tests = Tests {
+                bin_args: &args,
+                tmp_root: &s.0,
+                early_kill,
+            };
+            tests.run(&[bin], Some(1), "0", Some(secs(20))).unwrap()
+        };
+        // a failed line: caught at once, although the process would sleep and exit 0
+        let (ran, took) = run(
+            "echo 'test a ... ok'; echo 'test b ... FAILED'; sleep 10",
+            true,
+        );
+        assert_eq!(ran, Ran::Caught);
+        assert!(took < secs(5), "{took:?}");
+        // the same output is not looked at without early kill
+        let (ran, _) = run("echo 'test b ... FAILED'", false);
+        assert_eq!(ran, Ran::Missed);
+        // a descendant in a session of its own keeps stdout open for 6 s
+        let (ran, took) = run(
+            "perl -MPOSIX -e 'POSIX::setsid(); exec \"sleep\", \"6\"' & exit 0",
+            true,
+        );
+        assert_eq!(ran, Ran::Missed);
+        assert!(took < secs(4), "{took:?}");
+    }
+
+    #[test]
     fn the_binaries_after_a_failing_one_are_not_started() {
         let s = Scratch::new("order");
         let args = vec![
@@ -364,6 +497,7 @@ mod tests {
         let tests = Tests {
             bin_args: &args,
             tmp_root: &s.0.join("tmp"),
+            early_kill: false,
         };
         let (ran, _) = tests
             .run(&[role("first"), role("second")], None, "0", None)
@@ -384,8 +518,9 @@ mod tests {
         let tests = Tests {
             bin_args: &args,
             tmp_root: &s.0,
+            early_kill: false,
         };
-        match tests.baseline(&[bin], None).unwrap() {
+        match tests.baseline(&[bin], None, None).unwrap() {
             Baseline::Failed { log_tail, binary } => {
                 assert_eq!(log_tail, "one\ntwo");
                 assert_eq!(binary, "t (p)");
@@ -396,10 +531,11 @@ mod tests {
         let tests = Tests {
             bin_args: &args,
             tmp_root: &s.0,
+            early_kill: false,
         };
         assert!(matches!(
-            tests.baseline(&[bin], None).unwrap(),
-            Baseline::Passed(_)
+            tests.baseline(&[bin], None, None).unwrap(),
+            Baseline::Passed { .. }
         ));
     }
 
@@ -413,6 +549,7 @@ mod tests {
         let tests = Tests {
             bin_args: &args,
             tmp_root: &s.0.join("tmp"),
+            early_kill: false,
         };
         let seen = Mutex::new(Vec::new());
         let reruns = AtomicUsize::new(0);
@@ -420,8 +557,11 @@ mod tests {
             &tests,
             &[bin],
             &[0, 1, 2, 3],
-            2,
-            Duration::from_millis(400),
+            &Pool {
+                jobs: 2,
+                timeout: Duration::from_millis(400),
+                routing: None,
+            },
             &|id, ran, _| seen.lock().unwrap().push((id, ran)),
             &|r| reruns.store(r.count, Ordering::Relaxed),
         )

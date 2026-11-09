@@ -45,7 +45,8 @@ pub struct MutantResult {
     pub id: usize,
     pub status: Status,
     pub duration: Duration,
-    /// Why, for an unviable mutant (the compiler's first error).
+    /// Why, for an unviable mutant (the compiler's first error) or a missed
+    /// one that no test reached.
     pub reason: Option<String>,
 }
 
@@ -142,7 +143,9 @@ pub fn report_json(
             "duration": r.map_or(0, |r| r.duration.as_millis() as u64),
         });
         let reason = match r {
-            Some(r) if r.status == Status::Unviable => r.reason.clone(),
+            Some(r) if r.status == Status::Unviable || r.status == Status::Missed => {
+                r.reason.clone()
+            }
             Some(r) if r.status == Status::Timeout => {
                 timeout.map(|t| format!("did not end within {}s", t.as_secs()))
             }
