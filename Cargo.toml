@@ -1,0 +1,12 @@
+[package]
+name = "cargo-schemata"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+description = "Mutation testing for Rust that builds mutants once, as schemata."
+repository = "https://github.com/t09tanaka/cargo-schemata"
+
+[[bin]]
+name = "cargo-schemata"
+path = "src/main.rs"
