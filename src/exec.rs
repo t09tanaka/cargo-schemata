@@ -20,6 +20,8 @@ const MINIMUM_TIMEOUT: Duration = Duration::from_secs(20);
 /// What the baseline is multiplied by, as in cargo-mutants 27.1.0.
 const TIMEOUT_MULTIPLIER: f64 = 5.0;
 
+// Copyright 2023-2025 Martin Pool
+// Ported from cargo-mutants 27.1.0 (MIT); see NOTICE.
 /// The time the tests of one mutant get: the explicit limit, or the baseline
 /// times five, at least 20 seconds (cargo-mutants 27.1.0, `src/timeouts.rs`).
 pub fn mutant_timeout(baseline: Duration, explicit: Option<Duration>) -> Duration {
