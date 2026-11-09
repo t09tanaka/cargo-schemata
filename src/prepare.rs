@@ -17,6 +17,7 @@ use serde::Serialize;
 
 use crate::diag::{Diag, ErrSig, parse_messages};
 use crate::mutant::Mutant;
+use crate::proc::{Sink, run_group};
 use crate::rewrite::{FilePlan, Placement, RUNTIME_MODULE, Rendered, apply_single, placement};
 use crate::sync::{Overrides, sync_tree, write_if_changed};
 use crate::workspace::{Package, Workspace};
@@ -77,9 +78,15 @@ pub struct Prepared {
     pub test_binaries: Vec<TestBinary>,
     /// Ids of the mutants in the embedded build.
     pub embedded: Vec<usize>,
-    /// Mutants built one at a time, with their own test binaries.
+    /// Ids of the mutants to build one at a time, with [`Prepared::builder`].
+    pub single_ids: Vec<usize>,
+    /// Builds the mutants of `single_ids`, one at a time.
+    pub builder: SingleBuilder,
+    /// Filled by [`build_singles`] (`--build-only`): the mutants built one at
+    /// a time, with test binaries kept in a directory of their own.
     pub single: Vec<(usize, Vec<TestBinary>)>,
-    /// Mutants that do not compile, with the first error.
+    /// Mutants that do not compile, with the first error. Mutants built one
+    /// at a time are added by [`build_singles`].
     pub unviable: Vec<(usize, String)>,
     /// Why each mutant was built on its own.
     pub single_why: BTreeMap<usize, String>,
@@ -98,6 +105,7 @@ enum Phase {
     Build,
 }
 
+#[derive(Debug)]
 struct Cargo {
     dir: PathBuf,
     target_dir: PathBuf,
@@ -130,10 +138,10 @@ impl Cargo {
             .env("CARGO_ENCODED_RUSTFLAGS", encoded_rustflags())
             .env("INSTA_UPDATE", "no")
             .env_remove(MUTANT_ENV);
-        let out = cmd.output().context("failed to run cargo")?;
+        let out = run_group(&mut cmd, None, &Sink::Capture).context("failed to run cargo")?;
         let parsed = parse_messages(&out.stdout);
         Ok(Run {
-            success: out.status.success(),
+            success: out.status.is_some_and(|s| s.success()),
             errors: parsed.errors,
             artifacts: parsed.artifacts,
             stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
@@ -329,7 +337,6 @@ pub fn prepare(
     let target_dir = workspace.target_dir().as_std_path().to_owned();
     let schemata_dir = target_dir.join("schemata");
     let work = schemata_dir.join("work");
-    let by_id: HashMap<usize, &Mutant> = mutants.iter().map(|m| (m.id, m)).collect();
 
     let mut single_why: BTreeMap<usize, String> = BTreeMap::new();
     let mut embed_by_file: BTreeMap<PathBuf, Vec<&Mutant>> = BTreeMap::new();
@@ -521,75 +528,24 @@ pub fn prepare(
         }
     }
 
-    // 3. one at a time
-    let t_single = Instant::now();
-    let single_work = schemata_dir.join("single-work");
-    let single_target = schemata_dir.join("single-target");
-    let single_out = schemata_dir.join("single");
-    let single_cargo = Cargo {
-        dir: single_work.clone(),
-        target_dir: single_target.clone(),
-        packages: package_names,
-        args: opts.cargo_args.clone(),
-    };
-    let mut single: Vec<(usize, Vec<TestBinary>)> = Vec::new();
+    // 3. the ones that are built one at a time, by `build_singles` or by the caller
     let single_ids: Vec<usize> = single_why.keys().copied().collect();
-    let mut single_meta: Option<cargo_metadata::Metadata> = None;
-    if single_out.exists() {
-        std::fs::remove_dir_all(&single_out)?;
-    }
-    for &id in &single_ids {
-        let m = by_id[&id];
-        let rel = m.file.as_std_path().to_owned();
-        let original = match emb.files.get(&rel) {
-            Some(f) => f.original.clone(),
-            None => std::fs::read_to_string(root.join(&rel))
-                .with_context(|| format!("read {}", rel.display()))?,
-        };
-        let mut ov = Overrides::new();
-        ov.insert(rel, apply_single(&original, m));
-        sync_tree(&root, &single_work, std::slice::from_ref(&target_dir), &ov)?;
-        let run = single_cargo.run(Phase::Build)?;
-        if !run.success || !run.errors.is_empty() {
-            let why = run
-                .errors
-                .first()
-                .map(Diag::describe)
-                .unwrap_or_else(|| tail(&run.stderr));
-            unviable.push((id, why));
-            continue;
-        }
-        if single_meta.is_none() {
-            single_meta = Some(
-                cargo_metadata::MetadataCommand::new()
-                    .no_deps()
-                    .current_dir(&single_work)
-                    .exec()
-                    .context("cargo metadata on the single-build directory")?,
-            );
-        }
-        let out_dir = single_out.join(id.to_string());
-        std::fs::create_dir_all(&out_dir)?;
-        let bins = binaries(
-            &run.artifacts,
-            single_meta.as_ref().expect("metadata"),
-            &single_target,
-            Some(&out_dir),
-        )?;
-        single.push((id, bins));
-    }
-    let single_builds = t_single.elapsed();
-    let single_count = single_ids.len();
-    // Mutants that turned out unviable no longer count as single.
-    let unviable_ids: BTreeSet<usize> = unviable.iter().map(|(id, _)| *id).collect();
-    single_why.retain(|id, _| !unviable_ids.contains(id));
+    let builder = SingleBuilder::new(
+        root,
+        target_dir,
+        &schemata_dir,
+        package_names,
+        opts.cargo_args.clone(),
+    )?;
     unviable.sort();
 
     Ok(Prepared {
         work_dir: work.clone(),
         test_binaries,
         embedded: active.into_iter().collect(),
-        single,
+        single_ids,
+        builder,
+        single: Vec::new(),
         unviable,
         single_why,
         stats: Stats {
@@ -598,10 +554,132 @@ pub fn prepare(
             budget_exhausted,
             copy_and_rewrite,
             embedded_build,
-            single_builds,
-            single_build_count: single_count,
+            single_builds: Duration::ZERO,
+            single_build_count: 0,
         },
     })
+}
+
+/// What a build of one mutant gave.
+pub enum Single {
+    /// The test binaries, valid until the next build.
+    Built(Vec<TestBinary>),
+    /// The mutant does not compile; the first error.
+    Unviable(String),
+}
+
+/// Builds mutants one at a time in `<target dir>/schemata/single-work`.
+#[derive(Debug)]
+pub struct SingleBuilder {
+    root: PathBuf,
+    cargo_target_dir: PathBuf,
+    work: PathBuf,
+    target: PathBuf,
+    out: PathBuf,
+    cargo: Cargo,
+    meta: Option<cargo_metadata::Metadata>,
+}
+
+impl SingleBuilder {
+    fn new(
+        root: PathBuf,
+        cargo_target_dir: PathBuf,
+        schemata_dir: &Path,
+        packages: Vec<String>,
+        args: Vec<String>,
+    ) -> Result<SingleBuilder> {
+        let work = schemata_dir.join("single-work");
+        let target = schemata_dir.join("single-target");
+        let out = schemata_dir.join("single");
+        if out.exists() {
+            std::fs::remove_dir_all(&out)?;
+        }
+        Ok(SingleBuilder {
+            root,
+            cargo_target_dir,
+            cargo: Cargo {
+                dir: work.clone(),
+                target_dir: target.clone(),
+                packages,
+                args,
+            },
+            work,
+            target,
+            out,
+            meta: None,
+        })
+    }
+
+    /// Build `m` on its own. The binaries (and the `CARGO_BIN_EXE_*` paths and
+    /// working directory they carry) are those of the shared build directory,
+    /// so they are only good until the next call. With `keep` they are copied
+    /// to a directory of their own first, but the paths in their environment
+    /// still point to the shared one.
+    pub fn build(&mut self, m: &Mutant, keep: bool) -> Result<Single> {
+        let rel = m.file.as_std_path().to_owned();
+        let original = std::fs::read_to_string(self.root.join(&rel))
+            .with_context(|| format!("read {}", rel.display()))?;
+        let mut ov = Overrides::new();
+        ov.insert(rel, apply_single(&original, m));
+        sync_tree(
+            &self.root,
+            &self.work,
+            std::slice::from_ref(&self.cargo_target_dir),
+            &ov,
+        )?;
+        let run = self.cargo.run(Phase::Build)?;
+        if !run.success || !run.errors.is_empty() {
+            let why = run
+                .errors
+                .first()
+                .map(Diag::describe)
+                .unwrap_or_else(|| tail(&run.stderr));
+            return Ok(Single::Unviable(why));
+        }
+        if self.meta.is_none() {
+            self.meta = Some(
+                cargo_metadata::MetadataCommand::new()
+                    .no_deps()
+                    .current_dir(&self.work)
+                    .exec()
+                    .context("cargo metadata on the single-build directory")?,
+            );
+        }
+        let copy_to = if keep {
+            let dir = self.out.join(m.id.to_string());
+            std::fs::create_dir_all(&dir)?;
+            Some(dir)
+        } else {
+            None
+        };
+        let bins = binaries(
+            &run.artifacts,
+            self.meta.as_ref().expect("metadata"),
+            &self.target,
+            copy_to.as_deref(),
+        )?;
+        Ok(Single::Built(bins))
+    }
+}
+
+/// `--build-only`: build every mutant of `single_ids`, keeping the binaries of
+/// each. Those that do not compile move to `unviable`.
+pub fn build_singles(p: &mut Prepared, mutants: &[Mutant]) -> Result<()> {
+    let t = Instant::now();
+    let by_id: HashMap<usize, &Mutant> = mutants.iter().map(|m| (m.id, m)).collect();
+    for id in p.single_ids.clone() {
+        match p.builder.build(by_id[&id], true)? {
+            Single::Built(bins) => p.single.push((id, bins)),
+            Single::Unviable(why) => {
+                p.single_why.remove(&id);
+                p.unviable.push((id, why));
+            }
+        }
+    }
+    p.unviable.sort();
+    p.stats.single_builds = t.elapsed();
+    p.stats.single_build_count = p.single_ids.len();
+    Ok(())
 }
 
 /// The test binaries among `artifacts`, with the environment `cargo test`

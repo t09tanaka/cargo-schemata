@@ -1,46 +1,80 @@
 //! cargo-schemata: mutation testing for Rust that builds mutants once, as schemata.
 //!
-//! This stage lists the mutants and builds them (`--build-only`); running them comes later.
+//! `--list` lists the mutants, `--build-only` builds them, and a plain run builds
+//! them, runs the tests of each and reports what was caught.
 
 mod diag;
+mod exec;
 mod fnvalue;
+mod interrupt;
 mod list;
+mod lock;
 mod mutant;
 mod options;
 mod path;
 mod prepare;
 mod pretty;
+mod proc;
 mod report;
+mod results;
 mod rewrite;
 mod span;
 mod sync;
 mod visit;
 mod workspace;
 
+use std::collections::HashMap;
 use std::process::ExitCode;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 
+use crate::exec::{Baseline, Ran, Tests};
+use crate::interrupt::Interrupted;
+use crate::mutant::Mutant;
 use crate::options::{Config, Filters, Options};
-use crate::workspace::{PackageFilter, Workspace};
+use crate::prepare::Single;
+use crate::results::{Counts, MutantResult, Status};
+use crate::workspace::{Package, PackageFilter, Workspace};
 
 /// Mutation testing for Rust that builds mutants once, as schemata.
 #[derive(Parser, Debug)]
 #[command(name = "cargo-schemata", version, bin_name = "cargo schemata")]
 struct Args {
     /// Just list possible mutants, don't run them.
-    #[arg(long, help_heading = "Output")]
+    #[arg(long, conflicts_with_all = ["jobs", "timeout"], help_heading = "Output")]
     list: bool,
 
     /// Rewrite and build the mutants, and report how each was built, without running tests.
     #[arg(long, conflicts_with = "list", help_heading = "Output")]
     build_only: bool,
 
-    /// Output json (with --list or --build-only).
+    /// Output json: the report (for a run), the list, or the build report.
     #[arg(long, help_heading = "Output")]
     json: bool,
+
+    /// Write `report.json` and the `caught.txt`, `missed.txt`, `timeout.txt` and
+    /// `unviable.txt` lists to this directory.
+    #[arg(
+        long,
+        short = 'o',
+        default_value = "schemata.out",
+        help_heading = "Output"
+    )]
+    output: Utf8PathBuf,
+
+    /// Run this many test processes at a time. Default: a quarter of the
+    /// processors, at least 1 and at most 4.
+    #[arg(long, short = 'j', value_parser = clap::value_parser!(u32).range(1..), help_heading = "Execution")]
+    jobs: Option<u32>,
+
+    /// Seconds one mutant's tests may take. Default: five times the time of
+    /// the tests without a mutant, at least 20.
+    #[arg(long, short = 't', value_parser = parse_timeout, help_heading = "Execution")]
+    timeout: Option<f64>,
 
     /// Glob for files to examine; with no glob, all files are examined. Globs
     /// containing a slash match the whole path.
@@ -108,10 +142,88 @@ struct Args {
     #[arg(long, help_heading = "Config")]
     no_config: bool,
 
-    /// Arguments for cargo when building, such as `--lib` (as in cargo-mutants).
-    /// They do not affect `--list`.
+    /// Arguments for `cargo test` such as `--lib` (as in cargo-mutants); a second
+    /// `--` starts the arguments of the test binaries. They do not affect `--list`.
     #[arg(last = true)]
     test_args: Vec<String>,
+}
+
+fn parse_timeout(s: &str) -> Result<f64, String> {
+    let secs: f64 = s.parse().map_err(|e| format!("{e}"))?;
+    if secs.is_finite() && secs > 0.0 {
+        Ok(secs)
+    } else {
+        Err("must be a positive number of seconds".to_owned())
+    }
+}
+
+/// What follows `--`: arguments for cargo, and for the test binaries.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct TestArgs {
+    /// For `cargo check` and `cargo test --no-run`: target selection, features, profile.
+    build: Vec<String>,
+    /// For every test binary: a test name filter, and what follows a second `--`.
+    binary: Vec<String>,
+}
+
+/// Options of `cargo test` that take a value in the next argument.
+const VALUE_OPTIONS: &[&str] = &[
+    "--bin",
+    "--example",
+    "--test",
+    "--bench",
+    "--package",
+    "-p",
+    "--exclude",
+    "--features",
+    "-F",
+    "--target",
+    "--profile",
+    "--jobs",
+    "-j",
+    "--manifest-path",
+    "--color",
+    "--config",
+    "-Z",
+    "--target-dir",
+    "--message-format",
+    "--lockfile-path",
+];
+
+/// Options of `cargo test` that `cargo check` and `cargo test --no-run` do not
+/// take, or that this program sets itself.
+const NOT_FOR_BUILD: &[&str] = &[
+    "--no-fail-fast",
+    "--doc",
+    "--no-run",
+    "--target-dir",
+    "--message-format",
+];
+
+fn split_test_args(args: &[String]) -> TestArgs {
+    let (cargo_part, binary_part) = match args.iter().position(|a| a == "--") {
+        Some(i) => (&args[..i], &args[i + 1..]),
+        None => (args, &args[args.len()..]),
+    };
+    let mut out = TestArgs::default();
+    let mut it = cargo_part.iter();
+    while let Some(a) = it.next() {
+        if !a.starts_with('-') {
+            // as for `cargo test`, a bare word is a test name filter
+            out.binary.push(a.clone());
+            continue;
+        }
+        let name = a.split('=').next().unwrap_or(a);
+        let takes_value = VALUE_OPTIONS.contains(&a.as_str());
+        let value = if takes_value { it.next() } else { None };
+        if NOT_FOR_BUILD.contains(&name) {
+            continue;
+        }
+        out.build.push(a.clone());
+        out.build.extend(value.cloned());
+    }
+    out.binary.extend(binary_part.iter().cloned());
+    out
 }
 
 /// Drops the `schemata` token cargo inserts when invoked as `cargo schemata`.
@@ -124,7 +236,13 @@ fn strip_subcommand(args: Vec<String>) -> Vec<String> {
     out
 }
 
-fn run(args: &Args) -> Result<String> {
+struct Setup {
+    workspace: Workspace,
+    packages: Vec<Arc<Package>>,
+    mutants: Vec<Mutant>,
+}
+
+fn discover(args: &Args) -> Result<Setup> {
     let start_dir: &Utf8Path = if let Some(manifest_path) = &args.manifest_path {
         manifest_path
             .parent()
@@ -165,38 +283,255 @@ fn run(args: &Args) -> Result<String> {
     let packages = workspace.select(&package_filter)?;
     let mutants = visit::walk_tree(workspace.root(), &packages, &options)
         .context("failed to discover mutants")?;
-    if args.build_only {
-        let prepared = prepare::prepare(
-            &workspace,
-            &packages,
-            &mutants,
-            &prepare::BuildOptions {
-                cargo_args: args.test_args.clone(),
-                ..Default::default()
-            },
-        )
-        .context("failed to build mutants")?;
-        return Ok(report::report(&mutants, &prepared, args.json));
-    }
-    Ok(list::list_mutants(&mutants, args.json))
+    Ok(Setup {
+        workspace,
+        packages,
+        mutants,
+    })
 }
 
-fn main() -> ExitCode {
-    let args = Args::parse_from(strip_subcommand(std::env::args().collect()));
-    if !args.list && !args.build_only {
-        eprintln!("error: only `--list` and `--build-only` are supported so far");
-        return ExitCode::from(2);
+fn build_options(args: &Args) -> prepare::BuildOptions {
+    prepare::BuildOptions {
+        cargo_args: split_test_args(&args.test_args).build,
+        ..Default::default()
     }
-    match run(&args) {
-        Ok(out) => {
-            print!("{out}");
-            ExitCode::SUCCESS
+}
+
+fn schemata_dir(workspace: &Workspace) -> std::path::PathBuf {
+    workspace.target_dir().as_std_path().join("schemata")
+}
+
+fn run_list_or_build(args: &Args) -> Result<String> {
+    let setup = discover(args)?;
+    if args.build_only {
+        let _lock = lock::Lock::acquire(&schemata_dir(&setup.workspace))?;
+        let mut prepared = prepare::prepare(
+            &setup.workspace,
+            &setup.packages,
+            &setup.mutants,
+            &build_options(args),
+        )
+        .context("failed to build mutants")?;
+        prepare::build_singles(&mut prepared, &setup.mutants).context("failed to build mutants")?;
+        return Ok(report::report(&setup.mutants, &prepared, args.json));
+    }
+    Ok(list::list_mutants(&setup.mutants, args.json))
+}
+
+fn status_of(ran: Ran) -> Status {
+    match ran {
+        Ran::Caught => Status::Caught,
+        Ran::Missed => Status::Missed,
+        Ran::Timeout => Status::Timeout,
+    }
+}
+
+/// Build the mutants, run the tests of each, report. The exit code.
+fn run_tests(args: &Args) -> Result<i32> {
+    let started = Instant::now();
+    let setup = discover(args)?;
+    let Setup {
+        workspace,
+        packages,
+        mutants,
+    } = setup;
+    let json = args.json;
+    // With --json, stdout is the report alone.
+    let say = move |line: String| {
+        if json {
+            eprintln!("{line}");
+        } else {
+            println!("{line}");
         }
+    };
+    let schemata = schemata_dir(&workspace);
+    let _lock = lock::Lock::acquire(&schemata)?;
+    let out_dir = args.output.as_std_path();
+    results::clear_output(out_dir)?;
+    let tmp_root = schemata.join("tmp");
+    match std::fs::remove_dir_all(&tmp_root) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e).context("remove the temporary directories of the last run"),
+    }
+    let names: HashMap<usize, String> = mutants.iter().map(|m| (m.id, m.name(true))).collect();
+    let by_id: HashMap<usize, &Mutant> = mutants.iter().map(|m| (m.id, m)).collect();
+    let explicit = args.timeout.map(Duration::from_secs_f64);
+    let mut results: Vec<MutantResult> = Vec::new();
+    let mut limit = explicit;
+
+    if mutants.is_empty() {
+        say("no mutants to run".to_owned());
+    } else {
+        let t = Instant::now();
+        let mut prepared = prepare::prepare(&workspace, &packages, &mutants, &build_options(args))
+            .context("failed to build mutants")?;
+        say(format!(
+            "built: {} mutants in one build, {} one at a time, {} unviable ({:.1}s)",
+            prepared.embedded.len(),
+            prepared.single_ids.len(),
+            prepared.unviable.len(),
+            t.elapsed().as_secs_f64()
+        ));
+        if prepared.test_binaries.is_empty() {
+            anyhow::bail!(
+                "the build produced no test binaries; is `-- <cargo args>` selecting some?"
+            );
+        }
+        let bin_args = split_test_args(&args.test_args).binary;
+        let tests = Tests {
+            bin_args: &bin_args,
+            tmp_root: &tmp_root,
+        };
+        let baseline = match tests.baseline(&prepared.test_binaries, explicit)? {
+            Baseline::Passed(took) => took,
+            Baseline::Failed { binary, log_tail } => {
+                eprintln!("{log_tail}");
+                eprintln!(
+                    "cargo schemata: FAILED (the tests of {binary} fail without any mutant; nothing was run)"
+                );
+                return Ok(1);
+            }
+            Baseline::TimedOut(binary) => {
+                eprintln!(
+                    "cargo schemata: FAILED (the tests of {binary} did not end within --timeout without any mutant; nothing was run)"
+                );
+                return Ok(1);
+            }
+        };
+        let jobs = args.jobs.map_or_else(exec::default_jobs, |j| j as usize);
+        let timeout = exec::mutant_timeout(baseline, explicit);
+        limit = Some(timeout);
+        say(format!(
+            "baseline: tests pass in {:.1}s; a mutant gets {}s; {jobs} job(s)",
+            baseline.as_secs_f64(),
+            timeout.as_secs()
+        ));
+
+        let line = |id: usize, word: &str, took: Duration| {
+            say(format!(
+                "{} ... {word} in {:.1}s",
+                names[&id],
+                took.as_secs_f64()
+            ));
+        };
+        for (id, why) in std::mem::take(&mut prepared.unviable) {
+            line(id, Status::Unviable.word(), Duration::ZERO);
+            results.push(MutantResult {
+                id,
+                status: Status::Unviable,
+                duration: Duration::ZERO,
+                reason: Some(why),
+            });
+        }
+        let ran = exec::run_embedded(
+            &tests,
+            &prepared.test_binaries,
+            &prepared.embedded,
+            jobs,
+            timeout,
+            &|id, ran, took| line(id, status_of(ran).word(), took),
+            &|r| {
+                say(format!(
+                    "{} mutant(s) did not end within {}s and are run again alone",
+                    r.count,
+                    timeout.as_secs()
+                ));
+            },
+        )?;
+        results.extend(ran.into_iter().map(|(id, ran, duration)| MutantResult {
+            id,
+            status: status_of(ran),
+            duration,
+            reason: None,
+        }));
+        // One at a time, each tested right after its build: the binaries of a
+        // build (and the `CARGO_BIN_EXE_*` and working directory they carry)
+        // are replaced by the next one. Nothing else runs now, so a timeout is final.
+        for id in prepared.single_ids.clone() {
+            interrupt::check()?;
+            let t = Instant::now();
+            let result = match prepared.builder.build(by_id[&id], false)? {
+                Single::Unviable(why) => MutantResult {
+                    id,
+                    status: Status::Unviable,
+                    duration: Duration::ZERO,
+                    reason: Some(why),
+                },
+                Single::Built(bins) => {
+                    let (ran, took) = tests.run(&bins, None, "0", Some(timeout))?;
+                    MutantResult {
+                        id,
+                        status: status_of(ran),
+                        duration: took,
+                        reason: None,
+                    }
+                }
+            };
+            line(id, result.status.word(), t.elapsed());
+            results.push(result);
+        }
+    }
+
+    results.sort_by_key(|r| r.id);
+    let counts = Counts::of(&results);
+    let report = results::report_json(&mutants, &results, limit);
+    results::write_output(out_dir, &mutants, &results, &report)?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("serialize report")
+        );
+    }
+    if counts.missed > 0 {
+        eprintln!("cargo schemata: {} surviving mutant(s)", counts.missed);
+        for r in results.iter().filter(|r| r.status == Status::Missed) {
+            eprintln!("{} (missed)", names[&r.id]);
+        }
+        eprintln!(
+            "cargo schemata: FAILED ({})",
+            counts.text(started.elapsed())
+        );
+        Ok(1)
+    } else {
+        say(format!(
+            "cargo schemata: OK ({})",
+            counts.text(started.elapsed())
+        ));
+        Ok(0)
+    }
+}
+
+fn finish(result: Result<i32>) -> ExitCode {
+    match result {
+        Ok(code) => ExitCode::from(code as u8),
         Err(err) => {
+            if let Some(Interrupted(code)) = err.downcast_ref::<Interrupted>() {
+                eprintln!("cargo schemata: interrupted; no report was written");
+                return ExitCode::from(*code as u8);
+            }
             eprintln!("error: {err:#}");
             ExitCode::from(1)
         }
     }
+}
+
+fn main() -> ExitCode {
+    let args = Args::parse_from(strip_subcommand(std::env::args().collect()));
+    if args.list || args.build_only {
+        return match run_list_or_build(&args) {
+            Ok(out) => {
+                print!("{out}");
+                ExitCode::SUCCESS
+            }
+            Err(err) => finish(Err(err)),
+        };
+    }
+    if let Err(e) = interrupt::install() {
+        eprintln!("error: cannot handle signals: {e}");
+        return ExitCode::from(1);
+    }
+    finish(run_tests(&args))
 }
 
 #[cfg(test)]
@@ -243,11 +578,77 @@ mod tests {
 
     #[test]
     fn rejects_out_of_scope_options() {
-        for opt in ["--in-diff=x", "--shard=1/2", "-j2"] {
+        for opt in [
+            "--in-diff=x",
+            "--shard=1/2",
+            "--html=x",
+            "-j0",
+            "--timeout=0",
+            "--timeout=x",
+        ] {
             assert!(
                 Args::try_parse_from(v(&["x", "--list", opt])).is_err(),
                 "{opt}"
             );
         }
+    }
+
+    #[test]
+    fn parses_run_options() {
+        let a = Args::try_parse_from(v(&[
+            "x",
+            "-j",
+            "3",
+            "--timeout",
+            "2.5",
+            "-o",
+            "out",
+            "--json",
+        ]))
+        .unwrap();
+        assert_eq!(a.jobs, Some(3));
+        assert_eq!(a.timeout, Some(2.5));
+        assert_eq!(a.output, Utf8PathBuf::from("out"));
+        assert!(a.json);
+        let d = Args::try_parse_from(v(&["x"])).unwrap();
+        assert_eq!(d.output, Utf8PathBuf::from("schemata.out"));
+        assert_eq!((d.jobs, d.timeout), (None, None));
+        assert!(Args::try_parse_from(v(&["x", "--list", "-j", "2"])).is_err());
+    }
+
+    #[test]
+    fn splits_cargo_and_binary_arguments() {
+        let t = split_test_args(&v(&["--lib", "--", "--test-threads", "1"]));
+        assert_eq!(t.build, v(&["--lib"]));
+        assert_eq!(t.binary, v(&["--test-threads", "1"]));
+        // a bare word is a test name filter for the binaries, never for cargo check
+        let t = split_test_args(&v(&[
+            "--lib",
+            "parse",
+            "--features",
+            "a,b",
+            "-p",
+            "x",
+            "--",
+            "--nocapture",
+        ]));
+        assert_eq!(t.build, v(&["--lib", "--features", "a,b", "-p", "x"]));
+        assert_eq!(t.binary, v(&["parse", "--nocapture"]));
+        // what `cargo check` does not take, or this program sets itself, is dropped
+        let t = split_test_args(&v(&[
+            "--no-fail-fast",
+            "--test",
+            "it",
+            "--target-dir",
+            "t",
+            "--message-format=json",
+            "--doc",
+        ]));
+        assert_eq!(t.build, v(&["--test", "it"]));
+        assert_eq!(t.binary, Vec::<String>::new());
+        assert_eq!(split_test_args(&[]), TestArgs::default());
+        // only the first `--` splits
+        let t = split_test_args(&v(&["--", "a", "--", "b"]));
+        assert_eq!(t.binary, v(&["a", "--", "b"]));
     }
 }

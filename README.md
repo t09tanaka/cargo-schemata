@@ -2,7 +2,7 @@
 
 Mutation testing for Rust that builds mutants once, as schemata.
 
-**Status: under development.** Listing the mutants (`--list`) and building them (`--build-only`) work so far; running the tests does not.
+**Status: under development.** Listing the mutants (`--list`), building them (`--build-only`) and running the tests on them (a plain `cargo schemata`) work. Not yet: `--in-diff`, `--shard`, `--html`, and results reused from an earlier run.
 
 ## Goal
 
@@ -15,8 +15,9 @@ mutation at runtime.
 ## Usage
 
 ```
+cargo schemata [options] [-- <cargo test args> [-- <test binary args>]]
 cargo schemata --list [--json] [options]
-cargo schemata --build-only [--json] [options] [-- <cargo args>]
+cargo schemata --build-only [--json] [options] [-- <cargo test args>]
 cargo schemata --version | --help
 ```
 
@@ -41,7 +42,10 @@ static initializers are listed like any other code.
 | ---------------------------- | ---------------------------------------------------------------------------------------- |
 | `--list`                     | List the mutants                                                                         |
 | `--build-only`               | Rewrite and build the mutants once, and report how each was built (see below)            |
-| `--json`                     | Print JSON, as `cargo mutants --list --json` does                                        |
+| `--json`                     | Print JSON: the report of a run, or the list as `cargo mutants --list --json` does       |
+| `-j`, `--jobs <n>`           | How many test processes run at a time. Default: a quarter of the processors, at least 1 and at most 4 |
+| `-t`, `--timeout <secs>`     | What one mutant's tests may take. Default: five times the time of the tests without a mutant, at least 20 seconds |
+| `-o`, `--output <dir>`       | Where `report.json` and the `*.txt` lists are written. Default: `schemata.out`           |
 | `-f`, `--file <glob>`        | Examine only files matching a glob; may be repeated. A glob with a `/` matches the whole path, one without matches a file or directory name anywhere |
 | `-e`, `--exclude <glob>`     | Leave out files matching a glob; applied after `--file`                                  |
 | `-F`, `--re <regex>`         | Examine only mutants whose name (as listed, with line and column) matches                |
@@ -54,15 +58,14 @@ static initializers are listed like any other code.
 | `--skip-calls <names>`       | Skip calls to these functions and methods (comma separated)                              |
 | `--skip-calls-defaults <bool>` | Skip `with_capacity` as well. Default: true                                            |
 | `--config <file>`, `--no-config` | Read another configuration file, or none                                             |
-| `-- <cargo args>`            | Passed to `cargo check` and `cargo test --no-run` by `--build-only` (such as `--lib`); ignored by `--list` |
+| `-- <cargo test args>`       | Which tests are built and run, as for `cargo test` (`--lib`, `--test it`, `--features x`). A second `--` starts the arguments of the test binaries (`--test-threads 1`). A bare word is a test name filter for the binaries. Ignored by `--list` |
 
 `.cargo/mutants.toml` is read like cargo-mutants does: `examine_globs`,
 `exclude_globs`, `examine_re`, `exclude_re`, `skip_calls`,
 `skip_calls_defaults` and `error_values` are added to the command line (lists
 are joined, the command line first). Other keys are ignored.
 
-Exit codes: 0 on success, 2 for wrong usage (including options this version
-does not have, such as `--in-diff`, `--shard` and `-j`), 1 for other errors.
+See [Running the tests](#running-the-tests) for what a run prints and its exit codes.
 
 ### What each mutant carries
 
@@ -106,3 +109,108 @@ let-chain `&&`, deleted struct fields) are built one at a time in `<target dir>/
 Builds use `--cap-lints=warn`, so lints like `unreachable_code` or `#![deny(warnings)]` do not
 matter. `--build-only` prints the three groups (embedded, single, unviable) and the time of each
 stage; `--json` adds the test binaries with the working directory and environment to run them in.
+
+## Running the tests
+
+A plain `cargo schemata` builds as described above, then:
+
+1. **Baseline.** Every test binary is started once without a mutant. They have to
+   pass: otherwise nothing is run, the end of the output of the failing binary is
+   shown, and the exit code is 1. The time of the baseline sets the time limit.
+2. **Each mutant.** The test binaries are started one after the other with
+   `CARGO_SCHEMATA_MUTANT=<id>`, in the working directory and with the
+   environment `cargo test` gives them. The first one that exits with a non-zero
+   status (or is killed by a signal) *catches* the mutant, and the rest are not
+   started. If all of them exit with 0 the mutant is *missed*. A mutant that
+   did not compile is *unviable*. Standard input is closed and the output of the
+   tests is discarded.
+3. **Mutants built on their own** (const contexts, `&&` in let chains, deleted
+   struct fields, and the ones whose type changes) are built and run one at a
+   time, each right after its build: the test binaries and the `CARGO_BIN_EXE_*`
+   binaries of a build are replaced by the next one. They run after the others,
+   when nothing else is running.
+
+What it prints (progress on stdout, or on stderr with `--json`):
+
+```
+built: 18 mutants in one build, 4 one at a time, 2 unviable (0.8s)
+baseline: tests pass in 1.1s; a mutant gets 3s; 2 job(s)
+src/lib.rs:5:7: replace + with - in add ... caught in 0.0s
+src/lib.rs:10:7: replace * with + in twice ... missed in 0.0s
+src/lib.rs:17:11: replace += with *= in count_to ... timeout in 3.0s
+src/lib.rs:24:18: replace + with * in join ... unviable in 0.0s
+```
+
+When the run ends, the missed mutants, one line each, then the last line, both on
+stderr, or on stdout when nothing is missed:
+
+```
+cargo schemata: 4 surviving mutant(s)
+src/lib.rs:10:7: replace * with + in twice (missed)
+cargo schemata: FAILED (17 caught, 4 missed, 1 timeout, 2 unviable in 13.1s)
+```
+
+| Exit code | Meaning                                                                                  |
+| --------- | ---------------------------------------------------------------------------------------- |
+| 0         | No mutant was missed (`cargo schemata: OK (...)`)                                        |
+| 1         | A mutant was missed, the tests fail without a mutant, something could not be built or run, or another run is at work in the package |
+| 2         | Wrong usage: an unknown option, `--jobs 0`, a `--timeout` that is not positive, options this version does not have (`--in-diff`, `--shard`, `--html`) |
+| 130 / 143 | Interrupted (SIGINT / SIGTERM). The test processes were killed first, and no report was written |
+
+**There is no score threshold.** The exit code depends on the missed mutants alone.
+`timeout` and `unviable` mutants do not fail the run; the counts show them.
+
+### Time limits
+
+A mutant's tests get `max(20 seconds, 5 x the baseline, rounded up to the second)`,
+the rule of cargo-mutants 27.1.0, for all test binaries together; `--timeout`
+replaces it. Every test binary is started in a process group of its own. When
+the limit is reached the whole group gets SIGKILL, so processes the tests
+started do not stay behind. The group is also killed when a test binary has
+exited and left processes running. The mutant is a `timeout`, which does not
+fail the run.
+
+### Several mutants at a time
+
+`-j <n>` runs `n` mutants at the same time, each in its own test processes with
+its own `TMPDIR` (`<target dir>/schemata/tmp/<job>`). The processes share the
+working directory of the package copy: tests that write files there, or bind a
+fixed port, can disturb each other, so give `-j 1` for such a package. The
+default is a quarter of the logical processors, at least 1 and at most 4.
+
+With `-j 2` or more, a mutant that reaches the limit may only be slow because of
+the load. Those are run again alone, with the same limit, after the others, and
+take the status of that second run.
+
+### The output
+
+`--output <dir>` (default `schemata.out`) gets, after the run:
+
+- `report.json`, in the [mutation-testing-elements JSON schema](https://github.com/stryker-mutator/mutation-testing-elements/tree/master/packages/report-schema),
+  version 2. `framework.name` is `cargo-schemata`. Per file: `language` (`rust`),
+  `source`, and per mutant `id` (`<path>#<number>`), `mutatorName` (the
+  kind of mutation: `FnValue`, `BinaryOperator`, ...), `replacement`,
+  `description` (the name `--list` shows), `location` (1-based, `end` exclusive),
+  `status`, `duration` in milliseconds and, for a mutant that did not compile or
+  timed out, `statusReason`. The statuses: caught is `Killed`, missed is
+  `Survived`, timeout is `Timeout`, unviable is `CompileError`. `thresholds` is
+  there because the schema requires it; there is no threshold.
+- `caught.txt`, `missed.txt`, `timeout.txt`, `unviable.txt`: one mutant per line,
+  named as `--list` names them, like the files of cargo-mutants.
+
+A run starts by removing these five files (and only these) of the last run.
+`--json` prints the contents of `report.json` on stdout.
+
+### One run at a time
+
+A run takes a lock on `<target dir>/schemata/lock` (`flock`, held by the process
+for as long as it lives) before it changes anything. A second `cargo schemata`,
+or `--build-only`, in the same package ends at once with exit code 1. A run that was
+killed leaves no stale lock.
+
+### Differences from cargo-mutants
+
+Doctests are not run (only the test binaries `cargo test --no-run` builds).
+`--in-diff`, `--shard`, `--html` and reuse of earlier results are not there. The
+test processes of the mutants that are built in share one working directory
+(see `-j`).

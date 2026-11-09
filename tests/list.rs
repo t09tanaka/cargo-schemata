@@ -97,7 +97,6 @@ fn usage_errors_exit_2() {
         vec!["--list", "--shard", "1/2"],
         vec!["--list", "-j", "2"],
         vec!["--bogus"],
-        vec![],
     ] {
         let args: Vec<String> = args.into_iter().map(String::from).collect();
         let (_, _, code) = run("kitchen_sink", &args);
