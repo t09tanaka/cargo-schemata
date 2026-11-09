@@ -133,15 +133,23 @@ fn mutants_are_classified_and_embedded_ones_take_effect() {
     // do not compile in any form
     let times = find(r, "unviable", "replace + with * in sum_text");
     assert!(times["reason"].as_str().unwrap().contains("E0369"));
-    for u in r["unviable"].as_array().unwrap() {
-        if u["name"]
-            .as_str()
-            .unwrap()
-            .contains("replace && with || in both")
-        {
-            assert!(u["reason"].as_str().unwrap().contains("let chain"));
-        }
-    }
+    let chains: Vec<&Value> = r["unviable"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|u| {
+            u["name"]
+                .as_str()
+                .unwrap()
+                .contains("replace && with || in both")
+        })
+        .collect();
+    assert_eq!(chains.len(), 2, "{chains:?}");
+    assert!(
+        chains
+            .iter()
+            .all(|u| u["reason"].as_str().unwrap().contains("let chain"))
+    );
     assert!(
         r["unviable"]
             .as_array()
