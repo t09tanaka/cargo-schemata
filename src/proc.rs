@@ -68,6 +68,31 @@ fn kill_group(pgid: i32) {
     }
 }
 
+/// Ends the process group when dropped while armed: an early return (`?`) or
+/// a panic in the wait loop must not leave the children running.
+struct GroupGuard {
+    pgid: i32,
+    armed: bool,
+}
+
+impl GroupGuard {
+    fn new(pgid: i32) -> GroupGuard {
+        GroupGuard { pgid, armed: true }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for GroupGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            kill_group(self.pgid);
+        }
+    }
+}
+
 fn drain(mut r: impl Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
     std::thread::spawn(move || {
         let mut v = Vec::new();
@@ -98,6 +123,7 @@ pub fn run_group(cmd: &mut Command, timeout: Option<Duration>, sink: &Sink) -> R
         .spawn()
         .with_context(|| format!("failed to start {:?}", cmd.get_program()))?;
     let pgid = child.id() as i32;
+    let mut guard = GroupGuard::new(pgid);
     let failed = Arc::new(AtomicBool::new(false));
     let out = child.stdout.take().map(|o| {
         if matches!(sink, Sink::WatchFailed) {
@@ -120,6 +146,7 @@ pub fn run_group(cmd: &mut Command, timeout: Option<Duration>, sink: &Sink) -> R
         if let Some(code) = interrupt::requested() {
             kill_group(pgid);
             let _ = child.wait();
+            guard.disarm();
             return Err(Interrupted(code).into());
         }
         if failed.load(Ordering::Relaxed) {
@@ -135,6 +162,7 @@ pub fn run_group(cmd: &mut Command, timeout: Option<Duration>, sink: &Sink) -> R
         std::thread::sleep(nap);
         nap = (nap * 2).min(Duration::from_millis(20));
     };
+    guard.disarm();
     let join = |h: Option<std::thread::JoinHandle<Vec<u8>>>| {
         h.map(|h| h.join().unwrap_or_default()).unwrap_or_default()
     };
@@ -152,4 +180,49 @@ pub fn run_group(cmd: &mut Command, timeout: Option<Duration>, sink: &Sink) -> R
         stderr: join(err),
         early,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::process::ExitStatusExt;
+
+    fn sleeper() -> std::process::Child {
+        Command::new("sleep")
+            .arg("60")
+            .process_group(0)
+            .spawn()
+            .unwrap()
+    }
+
+    #[test]
+    fn dropping_an_armed_guard_kills_the_group() {
+        let mut child = sleeper();
+        drop(GroupGuard::new(child.id() as i32));
+        let status = child.wait().unwrap();
+        assert_eq!(status.signal(), Some(libc::SIGKILL));
+    }
+
+    #[test]
+    fn a_disarmed_guard_leaves_the_group_alone() {
+        let mut child = sleeper();
+        let mut guard = GroupGuard::new(child.id() as i32);
+        guard.disarm();
+        drop(guard);
+        assert!(child.try_wait().unwrap().is_none());
+        child.kill().unwrap();
+        child.wait().unwrap();
+    }
+
+    #[test]
+    fn a_panic_while_the_guard_is_held_kills_the_group() {
+        let mut child = sleeper();
+        let pgid = child.id() as i32;
+        let r = std::panic::catch_unwind(|| {
+            let _guard = GroupGuard::new(pgid);
+            panic!("boom");
+        });
+        assert!(r.is_err());
+        assert_eq!(child.wait().unwrap().signal(), Some(libc::SIGKILL));
+    }
 }
