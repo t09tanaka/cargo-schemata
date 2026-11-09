@@ -451,6 +451,37 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_test_line_ends_the_run_and_a_pipe_kept_by_another_session_is_not_waited_for() {
+        let s = Scratch::new("early");
+        let run = |script: &str, early_kill: bool| {
+            let (bin, args) = sh(script);
+            let tests = Tests {
+                bin_args: &args,
+                tmp_root: &s.0,
+                early_kill,
+            };
+            tests.run(&[bin], Some(1), "0", Some(secs(20))).unwrap()
+        };
+        // a failed line: caught at once, although the process would sleep and exit 0
+        let (ran, took) = run(
+            "echo 'test a ... ok'; echo 'test b ... FAILED'; sleep 10",
+            true,
+        );
+        assert_eq!(ran, Ran::Caught);
+        assert!(took < secs(5), "{took:?}");
+        // the same output is not looked at without early kill
+        let (ran, _) = run("echo 'test b ... FAILED'", false);
+        assert_eq!(ran, Ran::Missed);
+        // a descendant in a session of its own keeps stdout open for 6 s
+        let (ran, took) = run(
+            "perl -MPOSIX -e 'POSIX::setsid(); exec \"sleep\", \"6\"' & exit 0",
+            true,
+        );
+        assert_eq!(ran, Ran::Missed);
+        assert!(took < secs(4), "{took:?}");
+    }
+
+    #[test]
     fn the_binaries_after_a_failing_one_are_not_started() {
         let s = Scratch::new("order");
         let args = vec![

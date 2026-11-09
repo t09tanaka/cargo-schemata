@@ -138,6 +138,14 @@ pub fn run_group(cmd: &mut Command, timeout: Option<Duration>, sink: &Sink) -> R
     let join = |h: Option<std::thread::JoinHandle<Vec<u8>>>| {
         h.map(|h| h.join().unwrap_or_default()).unwrap_or_default()
     };
+    // The watcher ends at EOF, which a process that left the group (its own
+    // session) and kept our pipe never gives: it is not waited for.
+    let out = if matches!(sink, Sink::WatchFailed) {
+        drop(out);
+        None
+    } else {
+        out
+    };
     Ok(Finished {
         status,
         stdout: join(out),

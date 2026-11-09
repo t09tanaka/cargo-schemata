@@ -12,15 +12,22 @@ pub fn base() -> u32 {
     40
 }
 
+/// The tests never go above 1000, so `>` and `>=` live; only the lazy tests reach it.
+pub fn pad(x: u32) -> u32 {
+    if x > 1000 { 1000 } else { x }
+}
+
 // Built by the first test that reads it; later tests find it done.
-static TABLE: LazyLock<Vec<u32>> = LazyLock::new(|| vec![base() + 2]);
+static TABLE: LazyLock<Vec<u32>> = LazyLock::new(|| vec![pad(base() + 2)]);
 
 pub fn first() -> u32 {
     TABLE[0]
 }
 
 pub fn threaded_sum(a: u32, b: u32) -> u32 {
-    std::thread::spawn(move || a * 10 + b).join().unwrap()
+    std::thread::spawn(move || if a > 100 { 0 } else { a * 10 + b })
+        .join()
+        .unwrap()
 }
 
 pub fn never_called() -> u32 {

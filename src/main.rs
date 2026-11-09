@@ -389,11 +389,11 @@ fn run_tests(args: &Args) -> Result<i32> {
             );
         }
         let bin_args = split_test_args(&args.test_args).binary;
-        let route_ok = !args.no_routing && !route::changes_output(&bin_args);
+        let route_ok = !args.no_routing;
         let tests = Tests {
             bin_args: &bin_args,
             tmp_root: &tmp_root,
-            early_kill: route_ok,
+            early_kill: route_ok && !route::changes_output(&bin_args),
         };
         let trace_file = tmp_root.join("trace-baseline.txt");
         let t = Instant::now();

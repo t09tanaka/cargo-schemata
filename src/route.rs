@@ -71,14 +71,24 @@ pub fn split_libtest_args(args: &[String]) -> LibtestArgs {
     out
 }
 
-/// Whether the arguments change libtest's output or the way it selects in ways
-/// this module does not follow: then nothing is routed and nothing is killed early.
+/// Whether the arguments change libtest's output, or let a test write its own
+/// lines into it, so that a `test <name> ... FAILED` line may not be libtest's:
+/// then a run is not ended at such a line.
 pub fn changes_output(args: &[String]) -> bool {
     args.iter().any(|a| {
         let name = a.split('=').next().unwrap_or(a);
         matches!(
             name,
-            "--format" | "-q" | "--quiet" | "--color" | "--logfile" | "--list" | "-Z"
+            "--format"
+                | "-q"
+                | "--quiet"
+                | "--color"
+                | "--logfile"
+                | "--list"
+                | "-Z"
+                | "--nocapture"
+                | "--no-capture"
+                | "--show-output"
         )
     })
 }

@@ -166,6 +166,20 @@ fn routing_gives_the_results_of_a_full_run_and_is_faster() {
     // a mutant is run against the tests that reach it only: the 3 s test is not one of them
     let clamp = find(&entries, "replace > with >= in clamp");
     assert!(clamp.millis < 1500, "{} ms", clamp.millis);
+    // mutants that survive in a spawned thread and in a lazy initializer are run
+    // against the tests that reach them alone; every test would take 3 s
+    for part in [
+        "replace > with >= in threaded_sum",
+        "replace > with == in pad",
+    ] {
+        let e = find(&entries, part);
+        assert_eq!(
+            (e.status.as_str(), e.reason.as_deref()),
+            ("Survived", None),
+            "{part}"
+        );
+        assert!(e.millis < 1500, "{part}: {} ms", e.millis);
+    }
     // ... and ends when a test fails, without waiting for the slow one
     let gate = find(&entries, "replace gate -> bool with false");
     assert!(gate.millis < 1500, "{} ms", gate.millis);
