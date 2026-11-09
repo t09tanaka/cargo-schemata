@@ -92,6 +92,13 @@ impl Tests<'_> {
 
     pub fn tmp(&self, job: &str) -> Result<PathBuf> {
         let tmp = self.tmp_root.join(job);
+        // A fresh directory for every run: leftovers from an earlier mutant
+        // (or the baseline) must not reach this one.
+        match std::fs::remove_dir_all(&tmp) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e).with_context(|| format!("clear {}", tmp.display())),
+        }
         std::fs::create_dir_all(&tmp).with_context(|| format!("create {}", tmp.display()))?;
         Ok(tmp)
     }
@@ -355,8 +362,10 @@ mod tests {
     struct Scratch(PathBuf);
     impl Scratch {
         fn new(name: &str) -> Scratch {
-            let p =
-                std::env::temp_dir().join(format!("schemata-exec-{name}-{}", std::process::id()));
+            static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let p = std::env::temp_dir()
+                .join(format!("schemata-exec-{name}-{}-{n}", std::process::id()));
             let _ = std::fs::remove_dir_all(&p);
             std::fs::create_dir_all(&p).unwrap();
             Scratch(p)
@@ -366,6 +375,35 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn scratch_dirs_are_unique_even_for_the_same_name() {
+        let a = Scratch::new("same");
+        let b = Scratch::new("same");
+        assert_ne!(a.0, b.0);
+        drop(a);
+        assert!(b.0.is_dir(), "dropping one must not remove the other");
+    }
+
+    #[test]
+    fn the_job_tmpdir_is_emptied_before_each_run() {
+        let s = Scratch::new("tmpclear");
+        let (bin, args) = sh("test ! -e \"$TMPDIR/left\" && touch \"$TMPDIR/left\"");
+        let tests = Tests {
+            bin_args: &args,
+            tmp_root: &s.0,
+            early_kill: false,
+        };
+        // The second run would see the first run's file without the clearing.
+        assert_eq!(
+            tests
+                .run(std::slice::from_ref(&bin), None, "j", None)
+                .unwrap()
+                .0,
+            Ran::Missed
+        );
+        assert_eq!(tests.run(&[bin], None, "j", None).unwrap().0, Ran::Missed);
     }
 
     fn run_sh(script: &str, mutant: Option<usize>, limit: Option<Duration>) -> (Ran, Duration) {
