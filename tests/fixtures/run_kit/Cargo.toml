@@ -1,0 +1,12 @@
+[package]
+name = "run-kit"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "run_kit"
+path = "src/lib.rs"
+
+[[bin]]
+name = "run-kit"
+path = "src/main.rs"
