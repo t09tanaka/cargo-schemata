@@ -1,0 +1,11 @@
+[package]
+name = "kitchen-sink"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "sink-tool"
+path = "src/bin/tool.rs"

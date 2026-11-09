@@ -1,0 +1,8 @@
+# Read by both cargo-mutants and cargo-schemata.
+examine_globs = ["src/*.rs"]
+exclude_globs = ["generated.rs"]
+exclude_re = ["replace == with !=", "with_config::log"]
+examine_re = ["replace [a-z_]+ -> ", "delete ", "replace [-+] with", "replace == with"]
+skip_calls = ["log", "trace_call"]
+skip_calls_defaults = false
+error_values = ["Error::Mutated"]
