@@ -45,8 +45,9 @@ pub enum Context {
     /// const generic argument, const block, enum discriminant): a run-time
     /// switch cannot be evaluated here.
     Const,
-    /// A place where an `if` expression cannot replace the code, such as the
-    /// `&&` of a let chain.
+    /// A place where an `if` expression cannot replace the code: the `&&` of a
+    /// let chain, a deleted match arm, a deleted struct field. (`genre` tells
+    /// which; a later stage may still embed arms and fields some other way.)
     NoIfWrap,
 }
 

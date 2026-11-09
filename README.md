@@ -20,7 +20,7 @@ cargo schemata --version | --help
 ```
 
 Run it in a package or workspace (or name one with `--dir`). `--list` prints
-the mutants, one per line (`src/admit.rs:76:29: replace == with != in queue_order`).
+the mutants, one per line (`src/bin/tool.rs:2:15: replace + with - in main`).
 With `--json` it prints the same array, with the same keys, as
 `cargo mutants --list --json` (cargo-mutants 27.1.0). Only the comment in the
 `diff` differs: `/* ~ changed by cargo-schemata ~ */`.
@@ -69,7 +69,7 @@ position in the listing (`id`), the file, the function, the replaced region
 (`edit_range`) and the syntactic unit around it (`target_range`) as byte
 offsets into the file on disk, and a classification of where it sits: an
 ordinary run-time expression, a const context, or a place where an `if`
-cannot replace the code (the `&&` of a let chain). Only ordinary run-time
+cannot replace the code (the `&&` of a let chain, a deleted match arm or struct field). Only ordinary run-time
 expressions can be embedded in a single build; the others have to be built one
 at a time.
 

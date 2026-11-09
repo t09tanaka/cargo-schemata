@@ -604,7 +604,7 @@ impl<'ast> Visit<'ast> for DiscoveryVisitor<'_> {
                     Some(arm.pat.to_pretty_string()),
                     &quote! {},
                     Genre::MatchArm,
-                    false,
+                    true,
                 );
             }
         }
@@ -667,7 +667,7 @@ impl<'ast> Visit<'ast> for DiscoveryVisitor<'_> {
                             field_name: field_name.to_string(),
                             struct_name: struct_name.clone(),
                         }),
-                        false,
+                        true,
                     );
                 }
             }
@@ -716,6 +716,16 @@ impl<'ast> Visit<'ast> for DiscoveryVisitor<'_> {
             self.with_const(true, |v| v.visit_expr(e));
         } else {
             syn::visit::visit_generic_argument(self, i);
+        }
+    }
+
+    fn visit_const_param(&mut self, i: &'ast syn::ConstParam) {
+        for attr in &i.attrs {
+            self.visit_attribute(attr);
+        }
+        self.visit_type(&i.ty);
+        if let Some(default) = &i.default {
+            self.with_const(true, |v| v.visit_expr(default));
         }
     }
 
@@ -1009,6 +1019,7 @@ mod test {
         assert_eq!(text(code, &m.edit_range), "Some(1) => 1,");
         assert_eq!(m.target_range, m.edit_range);
 
+        assert_eq!(m.context, Context::NoIfWrap);
         let ms_true = find(&ms, "replace match guard n == 2 with true");
         assert_eq!(text(code, &ms_true.edit_range), "n == 2");
         assert_eq!(ms_true.target_range, ms_true.edit_range);
