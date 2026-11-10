@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.2.0)
+## 0.2.0 - 2026-11-10
 
 - **Breaking: a `--file` glob that matches no mutants fails the run.** A glob in
   `examine_globs` of `.cargo/mutants.toml` is checked the same way, and the error
