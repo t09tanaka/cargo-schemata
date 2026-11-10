@@ -90,12 +90,14 @@ struct Args {
     timeout: Option<f64>,
 
     /// Glob for files to examine; with no glob, all files are examined. Globs
-    /// containing a slash match the whole path.
+    /// containing a slash match the whole path. A glob (here or in
+    /// `examine_globs` of the config file) that matches no mutants fails a run.
     #[arg(long, short = 'f', help_heading = "Filters")]
     file: Vec<String>,
 
-    /// Do not fail when a `--file` glob matches no mutants (a file that was
-    /// renamed or removed). By default such a run exits with 1 and names the glob.
+    /// Do not fail when a `--file` glob or an `examine_globs` glob of the config
+    /// file matches no mutants (a file that was renamed or removed). By default
+    /// such a run exits with 1 and names the glob.
     #[arg(long, help_heading = "Filters")]
     allow_empty: bool,
 
@@ -282,12 +284,67 @@ struct MergeArgs {
     json: bool,
 }
 
+/// A glob that matches no mutant, and where it came from.
+#[derive(Debug, PartialEq, Eq)]
+struct EmptyGlob {
+    source: &'static str,
+    glob: String,
+}
+
+impl EmptyGlob {
+    fn message(&self) -> String {
+        format!(
+            "cargo schemata: no mutants in files matching {} {}",
+            self.source, self.glob
+        )
+    }
+}
+
+/// The globs of the command line (`--file`) and of the config file
+/// (`examine_globs`) that match none of `files`, the files that have mutants.
+fn find_empty_globs(
+    files: &[&std::path::Path],
+    cli: &[String],
+    config: &[String],
+) -> Result<Vec<EmptyGlob>> {
+    let mut empty = Vec::new();
+    let sources = [("--file", cli), ("config examine_globs", config)];
+    for (source, globs) in sources {
+        for glob in globs {
+            let set = options::build_glob_set([glob])?;
+            if !files
+                .iter()
+                .any(|f| set.as_ref().is_some_and(|s| s.is_match(f)))
+            {
+                empty.push(EmptyGlob {
+                    source,
+                    glob: glob.clone(),
+                });
+            }
+        }
+    }
+    Ok(empty)
+}
+
+/// What a run prints when it fails because of empty globs; `None` when it goes on.
+fn empty_glob_failure(empty: &[EmptyGlob], allow_empty: bool) -> Option<Vec<String>> {
+    if empty.is_empty() || allow_empty {
+        return None;
+    }
+    let mut lines: Vec<String> = empty.iter().map(EmptyGlob::message).collect();
+    lines.push(
+        "cargo schemata: FAILED (a glob matches no mutants, so that code would not be tested; fix the glob, or pass --allow-empty)"
+            .to_owned(),
+    );
+    Some(lines)
+}
+
 struct Setup {
     workspace: Workspace,
     packages: Vec<Arc<Package>>,
     mutants: Vec<Mutant>,
-    /// The `--file` globs that match no mutant of the tree.
-    empty_globs: Vec<String>,
+    /// The `--file` and config `examine_globs` globs that match no mutant of the tree.
+    empty_globs: Vec<EmptyGlob>,
     /// `--in-diff` left nothing to test (the diff is empty, or touches no mutant).
     diff_left_nothing: bool,
 }
@@ -341,16 +398,10 @@ fn discover(args: &Args) -> Result<Setup> {
     let packages = workspace.select(&package_filter)?;
     let mut mutants = visit::walk_tree(workspace.root(), &packages, &options)
         .context("failed to discover mutants")?;
-    let mut empty_globs = Vec::new();
-    for glob in &args.file {
-        let set = options::build_glob_set([glob])?;
-        if !mutants.iter().any(|m| {
-            set.as_ref()
-                .is_some_and(|s| s.is_match(m.file.as_std_path()))
-        }) {
-            empty_globs.push(glob.clone());
-        }
-    }
+    // Checked against the whole tree, before --in-diff: a diff that does not
+    // touch a module must not make the glob of that module look empty.
+    let files: Vec<&std::path::Path> = mutants.iter().map(|m| m.file.as_std_path()).collect();
+    let empty_globs = find_empty_globs(&files, &args.file, &config.examine_globs)?;
     let mut diff_left_nothing = false;
     if let Some(diff_path) = &args.in_diff {
         mutants = match in_diff::diff_filter_file(mutants, diff_path) {
@@ -428,15 +479,6 @@ fn run_tests(args: &Args) -> Result<i32> {
         empty_globs,
         ..
     } = setup;
-    if !empty_globs.is_empty() && !args.allow_empty {
-        for glob in &empty_globs {
-            eprintln!("cargo schemata: no mutants in files matching --file {glob}");
-        }
-        eprintln!(
-            "cargo schemata: FAILED (a --file glob matches no mutants, so that code would not be tested; fix the glob, or pass --allow-empty)"
-        );
-        return Ok(1);
-    }
     // The mutants of this part of the run; the report lists all of them.
     let mutants = part_of(&all_mutants, args.shard);
     let json = args.json;
@@ -452,6 +494,13 @@ fn run_tests(args: &Args) -> Result<i32> {
     let _lock = lock::Lock::acquire(&schemata)?;
     let out_dir = args.output.as_std_path();
     results::clear_output(out_dir)?;
+    if let Some(lines) = empty_glob_failure(&empty_globs, args.allow_empty) {
+        // the report of an earlier run (cleared above) must not be taken for this one
+        for line in lines {
+            eprintln!("{line}");
+        }
+        return Ok(1);
+    }
     // Versions before 0.2.0 kept the temporary directories in the target
     // directory; clear what they left.
     tmpdir::force_remove_dir_all(&schemata.join("tmp"))
@@ -739,6 +788,63 @@ mod tests {
 
     fn v(a: &[&str]) -> Vec<String> {
         a.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn empty_globs_fail_the_run_unless_allowed() {
+        let one = vec![EmptyGlob {
+            source: "--file",
+            glob: "x.rs".into(),
+        }];
+        assert_eq!(empty_glob_failure(&[], false), None);
+        assert_eq!(empty_glob_failure(&[], true), None);
+        assert_eq!(empty_glob_failure(&one, true), None);
+        let lines = empty_glob_failure(&one, false).unwrap();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].ends_with("--file x.rs"));
+        assert!(lines[1].starts_with("cargo schemata: FAILED"));
+        assert!(lines[1].contains("--allow-empty"));
+    }
+
+    #[test]
+    fn empty_globs_name_their_source_and_check_both_lists() {
+        use std::path::Path;
+        let files = [Path::new("src/lib.rs"), Path::new("src/a/b.rs")];
+        let none: Vec<String> = Vec::new();
+        assert_eq!(find_empty_globs(&files, &none, &none).unwrap(), vec![]);
+        let all = find_empty_globs(
+            &files,
+            &v(&["src/lib.rs", "gone.rs"]),
+            &v(&["b.rs", "old/*.rs"]),
+        )
+        .unwrap();
+        assert_eq!(
+            all,
+            vec![
+                EmptyGlob {
+                    source: "--file",
+                    glob: "gone.rs".into()
+                },
+                EmptyGlob {
+                    source: "config examine_globs",
+                    glob: "old/*.rs".into()
+                },
+            ]
+        );
+        assert_eq!(
+            all[0].message(),
+            "cargo schemata: no mutants in files matching --file gone.rs"
+        );
+        assert_eq!(
+            all[1].message(),
+            "cargo schemata: no mutants in files matching config examine_globs old/*.rs"
+        );
+        // with no file at all every glob is empty
+        assert_eq!(
+            find_empty_globs(&[], &v(&["a"]), &v(&["b"])).unwrap().len(),
+            2
+        );
+        assert!(find_empty_globs(&files, &v(&["["]), &none).is_err());
     }
 
     #[test]

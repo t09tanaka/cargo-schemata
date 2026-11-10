@@ -174,3 +174,114 @@ fn allow_empty_lets_a_glob_match_nothing() {
         String::from_utf8_lossy(&out.stdout)
     );
 }
+
+#[test]
+fn an_examine_glob_of_the_config_file_that_matches_nothing_fails_the_run() {
+    let kit = Kit::new("config-empty");
+    std::fs::create_dir_all(kit.dir.join(".cargo")).unwrap();
+    std::fs::write(
+        kit.dir.join(".cargo/mutants.toml"),
+        "examine_globs = [\"src/lib.rs\", \"src/renamed.rs\"]\n",
+    )
+    .unwrap();
+    let out = kit.command(&[]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{stderr}");
+    assert!(
+        stderr.contains("config examine_globs src/renamed.rs"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("examine_globs src/lib.rs"), "{stderr}");
+    assert!(!kit.record.exists(), "nothing should have run");
+
+    // --file and the config file are told apart
+    let out = kit.command(&["--file", "gone.rs"]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("--file gone.rs"), "{stderr}");
+    assert!(
+        stderr.contains("config examine_globs src/renamed.rs"),
+        "{stderr}"
+    );
+
+    // --allow-empty covers both
+    let out = kit.command(&["--allow-empty"]).output().unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn the_empty_glob_exit_clears_the_report_of_an_earlier_run() {
+    let kit = Kit::new("clear-report");
+    let out = kit.command(&[]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    let report = kit.out.join("report.json");
+    assert!(
+        report.exists(),
+        "{:?}",
+        std::fs::read_dir(&kit.out).map(|d| d.count())
+    );
+    let out = kit.command(&["--file", "src/renamed.rs"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert!(!report.exists(), "the old report is still there");
+}
+
+#[test]
+fn list_and_build_only_do_not_run_the_empty_check() {
+    let kit = Kit::new("list-empty");
+    for mode in ["--list", "--build-only"] {
+        let out = Command::new(env!("CARGO_BIN_EXE_cargo-schemata"))
+            .args(["schemata", "-d"])
+            .arg(&kit.dir)
+            .args([mode, "--file", "src/renamed.rs"])
+            .env_remove("CARGO_TARGET_DIR")
+            .output()
+            .unwrap();
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{mode}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+#[test]
+fn a_glob_that_matches_only_excluded_files_is_empty() {
+    let kit = Kit::new("excluded");
+    let out = kit
+        .command(&["--file", "src/lib.rs", "--exclude", "src/lib.rs"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{stderr}");
+    assert!(stderr.contains("--file src/lib.rs"), "{stderr}");
+}
+
+#[test]
+fn the_empty_check_looks_at_the_tree_not_at_the_diff() {
+    let kit = Kit::new("diff-empty");
+    let diff = kit.base.join("empty.diff");
+    std::fs::write(&diff, "").unwrap();
+    let diff = diff.to_str().unwrap().to_owned();
+    // an empty diff leaves nothing to test, but a glob of a missing file still fails
+    let out = kit
+        .command(&["--file", "src/renamed.rs", "--in-diff", &diff])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    // and a glob of a file the diff does not touch does not
+    let out = kit
+        .command(&["--file", "src/lib.rs", "--in-diff", &diff])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

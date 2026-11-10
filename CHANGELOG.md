@@ -2,8 +2,12 @@
 
 ## Unreleased (0.2.0)
 
-- **Breaking: a `--file` glob that matches no mutants fails the run.** The run
-  names the glob, runs nothing and exits with 1, where it used to pass with zero
+- **Breaking: a `--file` glob that matches no mutants fails the run.** A glob in
+  `examine_globs` of `.cargo/mutants.toml` is checked the same way, and the error
+  says which of the two a glob came from. The check is made against the whole
+  tree, before `--in-diff`; `--list` and `--build-only` do not run it. A glob that
+  matches only excluded files, or only files that produce no mutants, is empty.
+  The run names the glob, clears the report of an earlier run, runs nothing and exits with 1, where it used to pass with zero
   mutants (a renamed file left its module untested with CI green). `--allow-empty`
   restores the old behavior.
 - **The temporary directory of the tests is outside the repository.** `TMPDIR`
@@ -17,6 +21,16 @@
   timeout cannot leave directories that fail the next run. The run's directory is
   removed when the run ends, and what an earlier version left in
   `target/schemata/tmp` is cleared.
+- **The temporary directory moved to the filesystem of the system's temporary
+  directory.** It may be a tmpfs or mounted `noexec`, and it is no longer on the
+  filesystem of the repository (no rename or hard link across); set `TMPDIR` to
+  choose another place. The directory is created with mode 0700, directories of
+  runs that were killed are swept by the next run, and a directory that cannot be
+  removed is reported on stderr.
+- **A killed test no longer races the cleanup.** After a group of test processes
+  is killed, the run waits (up to 2 s) until it is gone before the temporary
+  directory is cleared, and a "directory not empty" error is the only one that is
+  retried. Restoring permissions does not follow symbolic links.
 
 ## 0.1.0
 
