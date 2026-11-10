@@ -96,11 +96,8 @@ impl Tests<'_> {
         let tmp = self.tmp_root.join(job);
         // A fresh directory for every run: leftovers from an earlier mutant
         // (or the baseline) must not reach this one.
-        match std::fs::remove_dir_all(&tmp) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e).with_context(|| format!("clear {}", tmp.display())),
-        }
+        crate::tmpdir::force_remove_dir_all(&tmp)
+            .with_context(|| format!("clear {}", tmp.display()))?;
         std::fs::create_dir_all(&tmp).with_context(|| format!("create {}", tmp.display()))?;
         Ok(tmp)
     }

@@ -67,6 +67,7 @@ static initializers are listed like any other code.
 | `-t`, `--timeout <secs>`     | What one mutant's tests may take. Default: five times the time of the tests without a mutant, at least 20 seconds |
 | `-o`, `--output <dir>`       | Where `report.json` and the `*.txt` lists are written. Default: `schemata.out`           |
 | `-f`, `--file <glob>`        | Examine only files matching a glob; may be repeated. A glob with a `/` matches the whole path, one without matches a file or directory name anywhere |
+| `--allow-empty`              | Do not fail when a `--file` glob, or an `examine_globs` glob of `.cargo/mutants.toml`, matches no mutants. Without it such a run exits with 1, names the glob (and whether it came from `--file` or the config file) and runs nothing, after clearing the report of an earlier run in `-o`, so that a renamed or removed file cannot leave its module untested while CI stays green. See [Empty globs](#empty-globs) |
 | `-e`, `--exclude <glob>`     | Leave out files matching a glob; applied after `--file`                                  |
 | `-F`, `--re <regex>`         | Examine only mutants whose name (as listed, with line and column) matches                |
 | `-E`, `--exclude-re <regex>` | Leave out mutants whose name matches                                                     |
@@ -81,6 +82,10 @@ static initializers are listed like any other code.
 | `--skip-calls-defaults <bool>` | Skip `with_capacity` as well. Default: true                                            |
 | `--config <file>`, `--no-config` | Read another configuration file, or none                                             |
 | `-- <cargo test args>`       | Which tests are built and run, as for `cargo test` (`--lib`, `--test it`, `--features x`). A second `--` starts the arguments of the test binaries (`--test-threads 1`). A bare word is a test name filter for the binaries. Ignored by `--list` |
+
+### Empty globs
+
+A glob in `--file` or in `examine_globs` of the config file is empty when no file it matches has a mutant that is left after the other filters. That includes a glob that matches only files given to `--exclude` or `exclude_globs`, and one that matches only files that produce zero mutants (no function worth mutating). The check is made against the whole tree, before `--in-diff` narrows the mutants: a diff that does not touch a module must not make the glob of that module fail, while a glob of a file that no longer exists fails whatever the diff is. `--list` and `--build-only` do not run the check: they print or build what the filters select, and an empty result is not an error there.
 
 ### `.cargo/mutants.toml`
 
@@ -271,7 +276,7 @@ cargo schemata: FAILED (17 caught, 4 missed, 1 timeout, 2 unviable in 13.1s)
 | Exit code | Meaning                                                                                  |
 | --------- | ---------------------------------------------------------------------------------------- |
 | 0         | No mutant was missed (`cargo schemata: OK (...)`)                                        |
-| 1         | A mutant was missed, the tests fail without a mutant, something could not be built or run, or another run is at work in the package. For `merge`: a mutant was missed, or the parts are not all the parts of one run |
+| 1         | A mutant was missed, a `--file` or `examine_globs` glob matches no mutants (unless `--allow-empty`), the tests fail without a mutant, something could not be built or run, or another run is at work in the package. For `merge`: a mutant was missed, or the parts are not all the parts of one run |
 | 2         | Wrong usage: an unknown option, `--jobs 0`, a `--timeout` that is not positive, a `--shard` that is not `k/n` with `k < n`, an unknown key in `.cargo/mutants.toml`, options this version does not have (`--html`) |
 | 5         | `--in-diff`: the diff is out of date with the source tree (the exit code of cargo-mutants) |
 | 6         | `--in-diff`: the diff cannot be read or parsed                                           |
@@ -350,7 +355,7 @@ fail the run.
 ### Several mutants at a time
 
 `-j <n>` runs `n` mutants at the same time, each in its own test processes with
-its own `TMPDIR` (`<target dir>/schemata/tmp/<job>`). The processes share the
+its own `TMPDIR` (`<job>` in a directory of its own below the temporary directory of the system, `cargo-schemata-<pid>-...`; it is outside the repository, and it is removed when the run ends, read-only directories included; its mode is 0700, and the directories of runs that were killed (SIGKILL) are removed by the next run). The temporary directory of the system is a different filesystem from the repository on many machines: it may be a tmpfs (a small one fills up, and the memory it takes counts), may be mounted `noexec` (a test that runs a program it wrote there fails) and cannot be reached by a rename or hard link from the repository. Set `TMPDIR` for the run to point it elsewhere. The processes share the
 working directory of the package copy: tests that write files there, or bind a
 fixed port, can disturb each other, so give `-j 1` for such a package. The
 default is a quarter of the logical processors, at least 1 and at most 4.
