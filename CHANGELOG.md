@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.0 - 2026-11-11
+
+- **With routing, a mutant's time limit comes from the tests it runs.** The limit
+  was `max(20 s, 5 x the whole baseline)` for every mutant, although a routed
+  mutant runs only the tests that reach it: in a crate with about 900 mutants and
+  a baseline of 23 s, each of 4 mutants in an endless loop took 116 s. A routed
+  mutant now gets `max(10 s, 5 x its tests)`, and never more than the old limit.
+  "Its tests" is the sum of what each test it runs took alone during tracing,
+  and the baseline time of a binary that runs whole. `--timeout`, `--no-routing`,
+  the mutants built on their own and a mutant that no single test reaches are
+  unchanged. A mutant that makes its tests more than five times slower, and
+  longer than 10 s, without hanging is now a `timeout` where it could be caught
+  or missed before; `--timeout` sets the limit for such a crate.
+- **The progress and the report name the limit that was used.** The first line
+  says `a mutant gets at most <n>s` when the limit is per mutant, the note of
+  the second run says `did not end within their time limit`, and `statusReason`
+  of a `Timeout` in `report.json` has the limit of that mutant.
+- **Changed default: `--jobs` is half the processors (at least 1, at most 8)
+  when routing is on.** It was a quarter (at most 4), which is one job on a
+  machine with 4 to 7 processors, and it stays a quarter with `--no-routing`.
+  The jobs have a process group and a `TMPDIR` of their own but share the
+  working directory of the package: for tests that write files there or bind a
+  fixed port, give `-j 1`, as before on machines with 8 or more processors.
+- A mutant that reaches its limit with two or more jobs is still run again
+  alone, with the limit it had. That is twice the limit for a mutant that really
+  hangs, which is now seconds.
+- A process group id of 1 or less is never signalled.
+
 ## 0.2.0 - 2026-11-10
 
 - **Breaking: a `--file` glob that matches no mutants fails the run.** A glob in

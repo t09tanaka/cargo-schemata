@@ -2,7 +2,7 @@
 
 Mutation testing for Rust that builds mutants once, as schemata.
 
-**Status: 0.2.0.** Listing the mutants (`--list`), building them (`--build-only`) and running the tests on them (a plain `cargo schemata`) work, and so do `--in-diff` (only the code a diff changes) and `--shard` with `merge` (a run in several parts). Unix only: Linux and macOS (Windows is not supported). There is no `--html`, and results of an earlier run are not reused (see "Differences from cargo-mutants").
+**Status: 0.3.0.** Listing the mutants (`--list`), building them (`--build-only`) and running the tests on them (a plain `cargo schemata`) work, and so do `--in-diff` (only the code a diff changes) and `--shard` with `merge` (a run in several parts). Unix only: Linux and macOS (Windows is not supported). There is no `--html`, and results of an earlier run are not reused (see "Differences from cargo-mutants").
 
 ## Goal
 
