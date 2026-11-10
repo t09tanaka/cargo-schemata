@@ -51,25 +51,10 @@ pub fn routed_timeout(estimate: Duration, whole: Duration) -> Duration {
     own.min(whole)
 }
 
-/// How many mutants run at a time when `--jobs` is not given.
-///
-/// With routing a mutant runs a few tests in one process, which rarely uses
-/// more than one processor: half the processors, at least 1 and at most 8. The
-/// other half is left to tests that start threads or processes, and to the
-/// mutants that run a whole binary. Without routing every mutant runs every
-/// test, and libtest starts a thread per processor in each: a quarter of the
-/// processors, at least 1 and at most 4.
-pub fn default_jobs(routing: bool) -> usize {
+/// A quarter of the processors, at least 1 and at most 4.
+pub fn default_jobs() -> usize {
     let cpus = std::thread::available_parallelism().map_or(1, usize::from);
-    jobs_for(cpus, routing)
-}
-
-fn jobs_for(cpus: usize, routing: bool) -> usize {
-    if routing {
-        (cpus / 2).clamp(1, 8)
-    } else {
-        (cpus / 4).clamp(1, 4)
-    }
+    (cpus / 4).clamp(1, 4)
 }
 
 /// How the test binaries are started.
@@ -422,19 +407,8 @@ mod tests {
     }
 
     #[test]
-    fn default_jobs_are_half_the_processors_with_routing_and_a_quarter_without() {
-        let with = |cpus| jobs_for(cpus, true);
-        assert_eq!(
-            [1, 2, 3, 4, 8, 15, 16, 17, 64].map(with),
-            [1, 1, 1, 2, 4, 7, 8, 8, 8]
-        );
-        let without = |cpus| jobs_for(cpus, false);
-        assert_eq!(
-            [1, 4, 7, 8, 12, 16, 17, 64].map(without),
-            [1, 1, 1, 2, 3, 4, 4, 4]
-        );
-        assert!((1..=8).contains(&default_jobs(true)));
-        assert!((1..=4).contains(&default_jobs(false)));
+    fn default_jobs_stay_between_one_and_four() {
+        assert!((1..=4).contains(&default_jobs()));
     }
 
     fn sh(script: &str) -> (TestBinary, Vec<String>) {

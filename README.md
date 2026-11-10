@@ -62,7 +62,7 @@ static initializers are listed like any other code.
 | `--list`                     | List the mutants                                                                         |
 | `--build-only`               | Rewrite and build the mutants once, and report how each was built (see below)            |
 | `--json`                     | Print JSON: the report of a run, or the list as `cargo mutants --list --json` does       |
-| `-j`, `--jobs <n>`           | How many test processes run at a time. Default: half the processors, at least 1 and at most 8; with `--no-routing` a quarter, at least 1 and at most 4 |
+| `-j`, `--jobs <n>`           | How many test processes run at a time. Default: a quarter of the processors, at least 1 and at most 4 |
 | `--no-routing`               | Run every test for every mutant, and do not end a run at the first failed test (see "Routing") |
 | `-t`, `--timeout <secs>`     | What one mutant's tests may take. Default: five times the time, without a mutant, of the tests the mutant runs: at least 10 seconds for the tests routing picks, and for all tests at least 20 seconds, which is also the most a mutant gets (see "Time limits") |
 | `-o`, `--output <dir>`       | Where `report.json` and the `*.txt` lists are written. Default: `schemata.out`           |
@@ -390,10 +390,7 @@ fail the run.
 its own `TMPDIR` (`<job>` in a directory of its own below the temporary directory of the system, `cargo-schemata-<pid>-...`; it is outside the repository, and it is removed when the run ends, read-only directories included; its mode is 0700, and the directories of runs that were killed (SIGKILL) are removed by the next run). The temporary directory of the system is a different filesystem from the repository on many machines: it may be a tmpfs (a small one fills up, and the memory it takes counts), may be mounted `noexec` (a test that runs a program it wrote there fails) and cannot be reached by a rename or hard link from the repository. Set `TMPDIR` for the run to point it elsewhere. The processes share the
 working directory of the package copy: tests that write files there, or bind a
 fixed port, can disturb each other, so give `-j 1` for such a package. The
-default is half the logical processors, at least 1 and at most 8: a routed mutant
-runs a few tests in one process, which rarely uses more than one processor. With
-`--no-routing` every mutant runs every test with a thread per processor, and the
-default is a quarter of the processors, at least 1 and at most 4.
+default is a quarter of the logical processors, at least 1 and at most 4.
 
 With `-j 2` or more, a mutant that reaches its limit may only be slow because of
 the load. Those are run again alone, each with the same limit it had, after the

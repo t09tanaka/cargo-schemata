@@ -73,8 +73,8 @@ struct Args {
     )]
     output: Utf8PathBuf,
 
-    /// Run this many test processes at a time. Default: half the processors,
-    /// at least 1 and at most 8; with `--no-routing` a quarter, at most 4.
+    /// Run this many test processes at a time. Default: a quarter of the
+    /// processors, at least 1 and at most 4.
     #[arg(long, short = 'j', value_parser = clap::value_parser!(u32).range(1..), help_heading = "Execution")]
     jobs: Option<u32>,
 
@@ -565,9 +565,7 @@ fn run_tests(args: &Args) -> Result<i32> {
                 return Ok(1);
             }
         };
-        let jobs = args
-            .jobs
-            .map_or_else(|| exec::default_jobs(route_ok), |j| j as usize);
+        let jobs = args.jobs.map_or_else(exec::default_jobs, |j| j as usize);
         let timeout = exec::mutant_timeout(baseline, explicit);
         // With routing a mutant's limit comes from the tests it runs, unless
         // the limit was given.
