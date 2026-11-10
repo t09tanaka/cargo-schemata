@@ -72,7 +72,17 @@ fn watch(r: impl Read + Send + 'static, hit: Arc<AtomicBool>) -> std::thread::Jo
     })
 }
 
+/// A process group id that may be signalled: the group of a child of ours. 0
+/// is the group of this process, 1 is init (and `killpg(1)` is `kill(-1)`:
+/// every process of the user), and a negative number is not a group.
+fn is_child_group(pgid: i32) -> bool {
+    pgid > 1
+}
+
 fn kill_group(pgid: i32) {
+    if !is_child_group(pgid) {
+        return;
+    }
     // SAFETY: killpg has no memory-safety preconditions. ESRCH (nothing left) is fine.
     unsafe {
         libc::killpg(pgid, libc::SIGKILL);
@@ -84,6 +94,10 @@ fn kill_group(pgid: i32) {
 /// be running for a moment, and writing, until the kernel has torn it down; the
 /// directory it writes to must not be removed before. True if the group is gone.
 fn group_gone_within(pgid: i32, cap: Duration) -> bool {
+    if !is_child_group(pgid) {
+        // Never ours, so never asked about: it is not gone.
+        return false;
+    }
     let start = Instant::now();
     loop {
         // SAFETY: signal 0 only checks that the group exists.
@@ -284,7 +298,22 @@ mod tests {
         assert_eq!(child.wait().unwrap().signal(), Some(libc::SIGKILL));
     }
 
+    #[test]
+    fn only_the_group_of_a_child_is_signalled() {
+        assert!(is_child_group(2));
+        assert!(is_child_group(i32::MAX));
+        for pgid in [1, 0, -1, -2, i32::MIN] {
+            assert!(!is_child_group(pgid), "{pgid}");
+        }
+        // A pid that does not fit an i32 wraps to a negative number.
+        assert!(!is_child_group(u32::MAX as i32));
+        assert!(!is_child_group((i32::MAX as u32 + 1) as i32));
+        // `kill_group` is not called with these here: were the check ever
+        // lost, the test itself would end every process of the user.
+    }
+
     fn group_exists(pgid: i32) -> bool {
+        assert!(is_child_group(pgid), "{pgid}");
         // SAFETY: signal 0 only checks that the group exists.
         let r = unsafe { libc::killpg(pgid, 0) };
         !(r == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH))
@@ -314,8 +343,12 @@ mod tests {
         let took = start.elapsed();
         assert!(took >= Duration::from_millis(60), "{took:?}");
         assert!(took < Duration::from_secs(5), "{took:?}");
-        // a group that is there but is not ours (EPERM, or ours as root) is not gone
-        assert!(!group_gone_within(1, Duration::from_millis(10)));
+        // init, the group of this process and a negative id are never asked about
+        for pgid in [1, 0, -1, i32::MIN] {
+            let start = Instant::now();
+            assert!(!group_gone_within(pgid, Duration::from_secs(5)));
+            assert!(start.elapsed() < Duration::from_secs(1), "{pgid}");
+        }
         kill_group(pgid);
         child.wait().unwrap();
         // a group that is not there is gone at once
