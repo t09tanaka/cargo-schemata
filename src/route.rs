@@ -515,7 +515,7 @@ mod tests {
         r.reach.insert(4, vec![vec![9]]);
         let pool = Pool {
             jobs: 2,
-            timeout: secs(116),
+            timeout: secs(120),
             per_mutant: true,
             routing: Some(&r),
         };
@@ -523,7 +523,7 @@ mod tests {
         assert_eq!(pool.limit(1, 1), secs(10));
         assert_eq!(pool.limit(4, 1), secs(20));
         // every test runs (no single test reaches it): the whole limit
-        assert_eq!(pool.limit(2, 1), secs(116));
+        assert_eq!(pool.limit(2, 1), secs(120));
         // an explicit limit is the limit of every mutant
         let given = Pool {
             timeout: secs(3),
@@ -538,7 +538,7 @@ mod tests {
             routing: None,
             ..pool
         };
-        assert_eq!(unrouted.limit(1, 1), secs(116));
+        assert_eq!(unrouted.limit(1, 1), secs(120));
         // a binary that runs whole: five times its baseline of 7 s
         let whole = routing(false, 10);
         let pool = Pool {

@@ -342,6 +342,11 @@ the old behaviour (every test, no early end):
   `test x ... FAILED` ends the mutant early as caught (see above).
 - A mutant that makes the tests hang after one of them has failed is a
   `timeout` without routing and *caught* with it.
+- A mutant that makes its tests more than five times slower, and longer than 10
+  seconds, without hanging: it reaches the limit of its own tests and is a
+  `timeout`, where the limit of the whole suite would let it end as caught or
+  missed. A `timeout` does not fail the run; `--timeout` sets one limit for all
+  (see "Time limits").
 
 ### Time limits
 
@@ -366,8 +371,8 @@ after 10 seconds, not after five times the whole test suite. The limit is never
 less than five times what the tests took, and never less than 10 seconds, so a
 mutant that only makes its tests a few times slower still ends as caught or
 missed; one that makes them more than five times slower (and longer than 10
-seconds) is a `timeout`, as it always was with the whole-suite rule. The first
-line of the progress shows the upper bound (`a mutant gets at most 116s`), and
+seconds) is a `timeout`, as it always was with the whole-suite rule. The second
+line of the progress shows the upper bound (`a mutant gets at most 20s`), and
 `statusReason` of a `Timeout` in the report says which limit that mutant had.
 
 `--timeout <secs>` replaces all of this: every mutant gets exactly that, with or

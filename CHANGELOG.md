@@ -4,8 +4,9 @@
 
 - **With routing, a mutant's time limit comes from the tests it runs.** The limit
   was `max(20 s, 5 x the whole baseline)` for every mutant, although a routed
-  mutant runs only the tests that reach it: in a crate with about 900 mutants and
-  a baseline of 23 s, each of 4 mutants in an endless loop took 116 s. A routed
+  mutant runs only the tests that reach it: a mutant in an endless loop cost five
+  times the whole test suite, which is minutes in a crate with a slow suite. In
+  the fixture of this repository it is given up after 10 s instead of 20 s. A routed
   mutant now gets `max(10 s, 5 x its tests)`, and never more than the old limit.
   "Its tests" is the sum of what each test it runs took alone during tracing,
   and the baseline time of a binary that runs whole. `--timeout`, `--no-routing`,

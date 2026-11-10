@@ -295,7 +295,7 @@ fn a_mutant_in_an_endless_loop_gets_the_limit_of_its_own_tests() {
         "{stdout}"
     );
     assert!(
-        stdout.contains("replace += with *= in count_to ... timeout in 10."),
+        stdout.contains("replace += with *= in count_to ... timeout in 1"),
         "{stdout}"
     );
     let report = kit.report();

@@ -406,17 +406,17 @@ mod tests {
     fn a_routed_mutant_gets_five_times_its_tests_between_ten_seconds_and_the_whole_limit() {
         let ms = Duration::from_millis;
         // most mutants: tests of milliseconds, so the floor
-        assert_eq!(routed_timeout(Duration::ZERO, secs(116)), secs(10));
-        assert_eq!(routed_timeout(ms(100), secs(116)), secs(10));
-        assert_eq!(routed_timeout(secs(2), secs(116)), secs(10));
+        assert_eq!(routed_timeout(Duration::ZERO, secs(120)), secs(10));
+        assert_eq!(routed_timeout(ms(100), secs(120)), secs(10));
+        assert_eq!(routed_timeout(secs(2), secs(120)), secs(10));
         // five times, rounded up to the second
-        assert_eq!(routed_timeout(ms(2001), secs(116)), secs(11));
-        assert_eq!(routed_timeout(secs(3), secs(116)), secs(15));
-        assert_eq!(routed_timeout(ms(3100), secs(116)), secs(16));
+        assert_eq!(routed_timeout(ms(2001), secs(120)), secs(11));
+        assert_eq!(routed_timeout(secs(3), secs(120)), secs(15));
+        assert_eq!(routed_timeout(ms(3100), secs(120)), secs(16));
         // never more than a mutant that runs every test
-        assert_eq!(routed_timeout(secs(23), secs(116)), secs(115));
-        assert_eq!(routed_timeout(ms(23_200), secs(116)), secs(116));
-        assert_eq!(routed_timeout(secs(60), secs(116)), secs(116));
+        assert_eq!(routed_timeout(secs(23), secs(120)), secs(115));
+        assert_eq!(routed_timeout(ms(24_100), secs(120)), secs(120));
+        assert_eq!(routed_timeout(secs(60), secs(120)), secs(120));
         assert_eq!(routed_timeout(secs(3), secs(20)), secs(15));
         assert_eq!(routed_timeout(secs(5), secs(20)), secs(20));
     }
