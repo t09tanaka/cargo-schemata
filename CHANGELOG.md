@@ -2,31 +2,25 @@
 
 ## 0.3.0 - 2026-11-11
 
-- **With routing, a mutant's time limit comes from the tests it runs.** The limit
-  was `max(20 s, 5 x the whole baseline)` for every mutant, although a routed
-  mutant runs only the tests that reach it: a mutant in an endless loop cost five
-  times the whole test suite, which is minutes in a crate with a slow suite. In
-  the fixture of this repository it is given up after 10 s instead of 20 s. A routed
-  mutant now gets `max(10 s, 5 x its tests)`, and never more than the old limit.
-  "Its tests" is the sum of what each test it runs took alone during tracing,
-  and the baseline time of a binary that runs whole. `--timeout`, `--no-routing`,
-  the mutants built on their own and a mutant that no single test reaches are
-  unchanged. A mutant that makes its tests more than five times slower, and
-  longer than 10 s, without hanging is now a `timeout` where it could be caught
-  or missed before; `--timeout` sets the limit for such a crate.
-- **The progress and the report name the limit that was used.** The first line
-  says `a mutant gets at most <n>s` when the limit is per mutant, the note of
-  the second run says `did not end within their time limit`, and `statusReason`
-  of a `Timeout` in `report.json` has the limit of that mutant.
-- **Changed default: `--jobs` is half the processors (at least 1, at most 8)
-  when routing is on.** It was a quarter (at most 4), which is one job on a
-  machine with 4 to 7 processors, and it stays a quarter with `--no-routing`.
-  The jobs have a process group and a `TMPDIR` of their own but share the
-  working directory of the package: for tests that write files there or bind a
-  fixed port, give `-j 1`, as before on machines with 8 or more processors.
-- A mutant that reaches its limit with two or more jobs is still run again
-  alone, with the limit it had. That is twice the limit for a mutant that really
-  hangs, which is now seconds.
+- **With routing and two or more jobs, a mutant in an endless loop frees its
+  job sooner.** Every mutant had `max(20 s, 5 x the whole baseline)` in the
+  first run and again in the run alone that follows a time-out, although a
+  routed mutant runs only the tests that reach it. The first run now gets
+  `max(10 s, 5 x its tests)`, never more than the old limit. "Its tests" is the
+  sum of what each test it runs took alone during tracing, and the baseline time
+  of a binary that runs whole. A mutant that reaches it is run again alone with
+  the old limit, and only that run decides: what is reported as caught, missed
+  or `timeout` is what 0.2.0 reports. A mutant that hangs costs about 10 s plus
+  the old limit instead of twice the old limit. Nothing changes with one job,
+  `--timeout`, `--no-routing`, the mutants built on their own, or a mutant that
+  no single test reaches.
+- The note of the second run says `did not end within the time given for their
+  own tests and are run again alone, with <n>s` when the first limit was the
+  sooner one.
+- The default of `--jobs` is unchanged (a quarter of the processors, at most 4).
+  The jobs share the working directory of the package and the network, so a
+  higher default could make tests fail, and a mutant look caught, in a package
+  whose tests write files there or bind a fixed port. More jobs stay a choice.
 - A process group id of 1 or less is never signalled.
 
 ## 0.2.0 - 2026-11-10

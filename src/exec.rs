@@ -32,20 +32,20 @@ pub fn mutant_timeout(baseline: Duration, explicit: Option<Duration>) -> Duratio
     })
 }
 
-/// The least time a mutant gets when the limit comes from its own tests.
-const MINIMUM_ROUTED_TIMEOUT: Duration = Duration::from_secs(10);
+/// The least time a routed mutant gets in the first pass of several jobs.
+pub const MINIMUM_ROUTED_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// The time a mutant gets that runs only some of the tests: five times what
-/// those tests took without a mutant (`estimate`), rounded up to the second and
-/// at least 10 seconds, but never more than `whole`, the limit of a mutant that
-/// runs every test ([`mutant_timeout`]).
+/// The time a mutant that runs only some of the tests gets in the first pass of
+/// several jobs: five times what those tests took without a mutant
+/// (`estimate`), rounded up to the second and at least `floor`, but never more
+/// than `whole`, the limit of a mutant that runs every test ([`mutant_timeout`]).
 ///
-/// A mutant in an endless loop is then given up after seconds, not after five
-/// times the whole test suite. The floor is far above what the tests of most
-/// mutants take, so that a slow machine, a loaded one, or a mutant that makes
-/// its tests several times slower without hanging is not taken for a time-out.
-pub fn routed_timeout(estimate: Duration, whole: Duration) -> Duration {
-    let own = MINIMUM_ROUTED_TIMEOUT.max(Duration::from_secs_f64(
+/// It only decides when a job is given to the next mutant, never the result: a
+/// mutant that reaches it is run again alone with `whole`. A mutant in an
+/// endless loop then holds a job for seconds, not for five times the whole
+/// test suite.
+pub fn routed_timeout(estimate: Duration, floor: Duration, whole: Duration) -> Duration {
+    let own = floor.max(Duration::from_secs_f64(
         (estimate.as_secs_f64() * TIMEOUT_MULTIPLIER).ceil(),
     ));
     own.min(whole)
@@ -248,8 +248,16 @@ fn run_one(
     pool: &Pool,
     id: usize,
     job: &str,
+    pass: Pass,
 ) -> Result<(Ran, Duration)> {
-    let (plan, limit) = pool.plan(id, bins.len());
+    let (plan, estimate) = match pool.routing {
+        Some(routing) => {
+            let (plan, estimate) = routing.plan_and_estimate(id, bins.len());
+            (Some(plan), estimate)
+        }
+        None => (None, None),
+    };
+    let limit = pool.limit(pass, estimate);
     match plan {
         None => tests.run(bins, Some(id), job, Some(limit)),
         Some(Plan::Unreached) => Ok((Ran::Unreached, Duration::ZERO)),
@@ -268,39 +276,45 @@ pub struct Pool<'a> {
     pub jobs: usize,
     /// The limit of a mutant that runs every test, or the explicit limit.
     pub timeout: Duration,
-    /// With routing, a mutant's limit comes from the tests it runs
-    /// ([`routed_timeout`]). False when the limit was given explicitly.
-    pub per_mutant: bool,
+    /// The least a routed mutant gets in the first pass of several jobs
+    /// ([`routed_timeout`]). `None` when the limit was given explicitly: every
+    /// run gets `timeout` then.
+    pub routed_floor: Option<Duration>,
     pub routing: Option<&'a Routing>,
 }
 
-impl Pool<'_> {
-    /// What routing plans for the mutant (`None` without routing), and its limit.
-    fn plan(&self, id: usize, nbins: usize) -> (Option<Plan>, Duration) {
-        let Some(routing) = self.routing else {
-            return (None, self.timeout);
-        };
-        let (plan, estimate) = routing.plan_and_estimate(id, nbins);
-        let limit = match estimate {
-            Some(estimate) if self.per_mutant => routed_timeout(estimate, self.timeout),
-            _ => self.timeout,
-        };
-        (Some(plan), limit)
-    }
+/// Which of the two runs of a mutant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pass {
+    /// With the other jobs.
+    First,
+    /// Alone, after a first run that reached its limit. Its result is final.
+    Alone,
+}
 
-    /// The time the tests of this mutant get, in the parallel run and when it
-    /// is run again alone.
-    pub fn limit(&self, id: usize, nbins: usize) -> Duration {
-        self.plan(id, nbins).1
+impl Pool<'_> {
+    /// The limit of a run whose steps took `estimate` without a mutant.
+    ///
+    /// The run that decides the result always gets `timeout`: the run alone,
+    /// and the only run of a single job. The first run of several jobs is run
+    /// again when it reaches its limit, so it may be given up sooner.
+    pub fn limit(&self, pass: Pass, estimate: Option<Duration>) -> Duration {
+        match (pass, self.routed_floor, estimate) {
+            (Pass::First, Some(floor), Some(estimate)) if self.jobs >= 2 => {
+                routed_timeout(estimate, floor, self.timeout)
+            }
+            _ => self.timeout,
+        }
     }
 }
 
 /// Run the mutants `ids` against the embedded test binaries, `jobs` at a time.
 ///
 /// With two or more jobs a mutant that reaches its limit may only be slow
-/// because of the load: it is run again alone at the end, with the same limit,
-/// and takes the status of that second run. `done` is called once per mutant,
-/// with its final status.
+/// because of the load, or (with routing) because the limit of that first run
+/// was made from the time of its own tests: it is run again alone at the end,
+/// with `timeout`, and takes the status of that second run. `done` is called
+/// once per mutant, with its final status.
 pub fn run_embedded(
     tests: &Tests,
     bins: &[TestBinary],
@@ -322,7 +336,7 @@ pub fn run_embedded(
                 while !stop.load(Ordering::Relaxed) {
                     let i = next.fetch_add(1, Ordering::Relaxed);
                     let Some(&id) = ids.get(i) else { break };
-                    match run_one(tests, bins, pool, id, &job) {
+                    match run_one(tests, bins, pool, id, &job, Pass::First) {
                         Ok((ran, took)) => {
                             if !(ran == Ran::Timeout && jobs >= 2) {
                                 done(id, ran, took);
@@ -352,7 +366,7 @@ pub fn run_embedded(
             rerun_note(Rerun { count: slow.len() });
         }
         for id in slow {
-            let (ran, took) = run_one(tests, bins, pool, id, "0")?;
+            let (ran, took) = run_one(tests, bins, pool, id, "0", Pass::Alone)?;
             done(id, ran, took);
             if let Some(r) = results.iter_mut().find(|r| r.0 == id) {
                 *r = (id, ran, took);
@@ -391,19 +405,22 @@ mod tests {
     fn a_routed_mutant_gets_five_times_its_tests_between_ten_seconds_and_the_whole_limit() {
         let ms = Duration::from_millis;
         // most mutants: tests of milliseconds, so the floor
-        assert_eq!(routed_timeout(Duration::ZERO, secs(120)), secs(10));
-        assert_eq!(routed_timeout(ms(100), secs(120)), secs(10));
-        assert_eq!(routed_timeout(secs(2), secs(120)), secs(10));
+        assert_eq!(
+            routed_timeout(Duration::ZERO, secs(10), secs(120)),
+            secs(10)
+        );
+        assert_eq!(routed_timeout(ms(100), secs(10), secs(120)), secs(10));
+        assert_eq!(routed_timeout(secs(2), secs(10), secs(120)), secs(10));
         // five times, rounded up to the second
-        assert_eq!(routed_timeout(ms(2001), secs(120)), secs(11));
-        assert_eq!(routed_timeout(secs(3), secs(120)), secs(15));
-        assert_eq!(routed_timeout(ms(3100), secs(120)), secs(16));
+        assert_eq!(routed_timeout(ms(2001), secs(10), secs(120)), secs(11));
+        assert_eq!(routed_timeout(secs(3), secs(10), secs(120)), secs(15));
+        assert_eq!(routed_timeout(ms(3100), secs(10), secs(120)), secs(16));
         // never more than a mutant that runs every test
-        assert_eq!(routed_timeout(secs(23), secs(120)), secs(115));
-        assert_eq!(routed_timeout(ms(24_100), secs(120)), secs(120));
-        assert_eq!(routed_timeout(secs(60), secs(120)), secs(120));
-        assert_eq!(routed_timeout(secs(3), secs(20)), secs(15));
-        assert_eq!(routed_timeout(secs(5), secs(20)), secs(20));
+        assert_eq!(routed_timeout(secs(23), secs(10), secs(120)), secs(115));
+        assert_eq!(routed_timeout(ms(24_100), secs(10), secs(120)), secs(120));
+        assert_eq!(routed_timeout(secs(60), secs(10), secs(120)), secs(120));
+        assert_eq!(routed_timeout(secs(3), secs(10), secs(20)), secs(15));
+        assert_eq!(routed_timeout(secs(5), secs(10), secs(20)), secs(20));
     }
 
     #[test]
@@ -663,7 +680,7 @@ mod tests {
             &Pool {
                 jobs: 2,
                 timeout: Duration::from_millis(400),
-                per_mutant: true,
+                routed_floor: None,
                 routing: None,
             },
             &|id, ran, _| seen.lock().unwrap().push((id, ran)),

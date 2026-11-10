@@ -505,47 +505,142 @@ mod tests {
     }
 
     #[test]
-    fn the_limit_of_a_mutant_follows_its_plan_unless_it_was_given() {
-        use crate::exec::Pool;
+    fn only_the_first_run_of_several_jobs_is_given_up_sooner() {
+        use crate::exec::{Pass, Pool};
         let secs = Duration::from_secs;
         let mut r = routing(true, 10);
-        // t9 takes 4 s alone: a mutant that only it reaches gets 20 s
+        // t9 takes 4 s alone, and only it reaches mutant 4
         r.times_mut()[9] = secs(4);
         r.global.insert(4);
         r.reach.insert(4, vec![vec![9]]);
         let pool = Pool {
             jobs: 2,
             timeout: secs(120),
-            per_mutant: true,
+            routed_floor: Some(secs(10)),
             routing: Some(&r),
         };
-        // 300 ms of tests: the floor
-        assert_eq!(pool.limit(1, 1), secs(10));
-        assert_eq!(pool.limit(4, 1), secs(20));
+        let limit = |pool: &Pool, pass, id| {
+            let estimate = pool.routing.and_then(|r| r.plan_and_estimate(id, 1).1);
+            pool.limit(pass, estimate)
+        };
+        // 300 ms of tests: the floor. 4 s of tests: five times.
+        assert_eq!(limit(&pool, Pass::First, 1), secs(10));
+        assert_eq!(limit(&pool, Pass::First, 4), secs(20));
         // every test runs (no single test reaches it): the whole limit
-        assert_eq!(pool.limit(2, 1), secs(120));
-        // an explicit limit is the limit of every mutant
+        assert_eq!(limit(&pool, Pass::First, 2), secs(120));
+        // the run that decides always gets the whole limit: the run alone ...
+        for id in [1, 2, 4] {
+            assert_eq!(limit(&pool, Pass::Alone, id), secs(120));
+        }
+        // ... and the only run of a single job
+        let single = Pool { jobs: 1, ..pool };
+        for id in [1, 2, 4] {
+            assert_eq!(limit(&single, Pass::First, id), secs(120));
+        }
+        // an explicit limit is the limit of every run
         let given = Pool {
             timeout: secs(3),
-            per_mutant: false,
+            routed_floor: None,
             ..pool
         };
-        for id in [1, 2, 4] {
-            assert_eq!(given.limit(id, 1), secs(3));
+        for (pass, id) in [(Pass::First, 1), (Pass::First, 4), (Pass::Alone, 1)] {
+            assert_eq!(limit(&given, pass, id), secs(3));
         }
         // and so is the whole limit without routing
         let unrouted = Pool {
             routing: None,
             ..pool
         };
-        assert_eq!(unrouted.limit(1, 1), secs(120));
+        assert_eq!(limit(&unrouted, Pass::First, 1), secs(120));
         // a binary that runs whole: five times its baseline of 7 s
         let whole = routing(false, 10);
         let pool = Pool {
             routing: Some(&whole),
             ..pool
         };
-        assert_eq!(pool.limit(1, 1), secs(35));
+        assert_eq!(limit(&pool, Pass::First, 1), secs(35));
+    }
+
+    /// The limit made from a mutant's own tests never decides its status: a
+    /// mutant that is slower than that limit but ends is caught or missed, as
+    /// it is with the limit of the whole suite; only one that does not end
+    /// within the whole limit is a time-out.
+    #[test]
+    fn a_mutant_slower_than_the_limit_of_its_own_tests_is_not_a_timeout() {
+        use crate::exec::{Pool, Ran, run_embedded};
+        let dir = std::env::temp_dir().join(format!("schemata-route-slow-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // 1 survives and 3 is caught, both after 0.7 s; 2 never ends; 4 is quick
+        let script = "case \"$CARGO_SCHEMATA_MUTANT\" in 1) sleep 0.7; exit 0;; 2) sleep 30;; 3) sleep 0.7; exit 1;; *) exit 0;; esac";
+        let bin = TestBinary {
+            path: "/bin/sh".into(),
+            cwd: "/".into(),
+            env: Vec::new(),
+            package: "p".into(),
+            target: "t".into(),
+        };
+        let bin_args = v(&["-c", script]);
+        let tests = Tests {
+            bin_args: &bin_args,
+            tmp_root: &dir,
+            early_kill: false,
+        };
+        // every mutant is reached by one test that took no time alone, so the
+        // first run gets the floor
+        let routing = Routing {
+            bins: vec![BinRoute {
+                traced: true,
+                tests: (0..10).map(|i| format!("t{i}")).collect(),
+                times: vec![Duration::ZERO; 10],
+                whole: Duration::from_millis(100),
+            }],
+            rest: bin_args.clone(),
+            global: [1, 2, 3, 4].into(),
+            reach: (1..=4).map(|id| (id, vec![vec![id]])).collect(),
+        };
+        let run = |jobs: usize, ids: &[usize]| {
+            let reruns = AtomicUsize::new(0);
+            let out = run_embedded(
+                &tests,
+                std::slice::from_ref(&bin),
+                ids,
+                &Pool {
+                    jobs,
+                    timeout: Duration::from_secs(2),
+                    routed_floor: Some(Duration::from_millis(200)),
+                    routing: Some(&routing),
+                },
+                &|_, _, _| {},
+                &|r| reruns.store(r.count, Ordering::Relaxed),
+            )
+            .unwrap();
+            (out, reruns.load(Ordering::Relaxed))
+        };
+
+        let (out, reruns) = run(2, &[1, 2, 3, 4]);
+        let statuses: Vec<(usize, Ran)> = out.iter().map(|r| (r.0, r.1)).collect();
+        assert_eq!(
+            statuses,
+            [
+                (1, Ran::Missed),
+                (2, Ran::Timeout),
+                (3, Ran::Caught),
+                (4, Ran::Missed)
+            ]
+        );
+        // the three slow ones reached 200 ms and were run again alone
+        assert_eq!(reruns, 3);
+        // the time is the one of the run alone: the hang got the whole 2 s
+        assert!(out[0].2 >= Duration::from_millis(700), "{:?}", out[0].2);
+        assert!(out[1].2 >= Duration::from_secs(2), "{:?}", out[1].2);
+
+        // a single job has no second run, so its only run gets the whole limit
+        let (out, reruns) = run(1, &[1, 3]);
+        let statuses: Vec<(usize, Ran)> = out.iter().map(|r| (r.0, r.1)).collect();
+        assert_eq!(statuses, [(1, Ran::Missed), (3, Ran::Caught)]);
+        assert_eq!(reruns, 0);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

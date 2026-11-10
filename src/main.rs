@@ -84,9 +84,9 @@ struct Args {
     #[arg(long, help_heading = "Execution")]
     no_routing: bool,
 
-    /// Seconds one mutant's tests may take. Default: five times the time,
-    /// without a mutant, of the tests the mutant runs: at least 10 for the
-    /// tests routing picks, at least 20 (and at most that) for all tests.
+    /// Seconds one mutant's tests may take. Default: five times the time of
+    /// the tests without a mutant, at least 20. With routing and two or more
+    /// jobs a first run is given up sooner, and run again alone with this.
     #[arg(long, short = 't', value_parser = parse_timeout, help_heading = "Execution")]
     timeout: Option<f64>,
 
@@ -567,17 +567,9 @@ fn run_tests(args: &Args) -> Result<i32> {
         };
         let jobs = args.jobs.map_or_else(exec::default_jobs, |j| j as usize);
         let timeout = exec::mutant_timeout(baseline, explicit);
-        // With routing a mutant's limit comes from the tests it runs, unless
-        // the limit was given.
-        let per_mutant = explicit.is_none();
         say(format!(
-            "baseline: tests pass in {:.1}s; a mutant gets {}{}s; {jobs} job(s) ({:.1}s)",
+            "baseline: tests pass in {:.1}s; a mutant gets {}s; {jobs} job(s) ({:.1}s)",
             baseline.as_secs_f64(),
-            if per_mutant && route_ok {
-                "at most "
-            } else {
-                ""
-            },
             timeout.as_secs(),
             t.elapsed().as_secs_f64()
         ));
@@ -643,10 +635,11 @@ fn run_tests(args: &Args) -> Result<i32> {
         let pool = exec::Pool {
             jobs,
             timeout,
-            per_mutant,
+            // The first run of a routed mutant is given up sooner, and run
+            // again with `timeout`, unless the limit was given.
+            routed_floor: explicit.is_none().then_some(exec::MINIMUM_ROUTED_TIMEOUT),
             routing: routing.as_ref(),
         };
-        let nbins = prepared.test_binaries.len();
         let ran = exec::run_embedded(
             &tests,
             &prepared.test_binaries,
@@ -660,15 +653,18 @@ fn run_tests(args: &Args) -> Result<i32> {
                 }
             },
             &|r| {
-                let limit = if per_mutant && pool.routing.is_some() {
-                    "their time limit".to_owned()
+                let secs = timeout.as_secs();
+                say(if pool.routed_floor.is_some() && pool.routing.is_some() {
+                    format!(
+                        "{} mutant(s) did not end within the time given for their own tests and are run again alone, with {secs}s",
+                        r.count
+                    )
                 } else {
-                    format!("{}s", timeout.as_secs())
-                };
-                say(format!(
-                    "{} mutant(s) did not end within {limit} and are run again alone",
-                    r.count
-                ));
+                    format!(
+                        "{} mutant(s) did not end within {secs}s and are run again alone",
+                        r.count
+                    )
+                });
             },
         )?;
         results.extend(ran.into_iter().map(|(id, ran, duration)| MutantResult {
@@ -677,7 +673,7 @@ fn run_tests(args: &Args) -> Result<i32> {
             duration,
             reason: match ran {
                 Ran::Unreached => Some(NOT_REACHED.to_owned()),
-                Ran::Timeout => Some(results::timeout_reason(pool.limit(id, nbins))),
+                Ran::Timeout => Some(results::timeout_reason(timeout)),
                 Ran::Caught | Ran::Missed => None,
             },
         }));
