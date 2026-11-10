@@ -67,6 +67,7 @@ static initializers are listed like any other code.
 | `-t`, `--timeout <secs>`     | What one mutant's tests may take. Default: five times the time of the tests without a mutant, at least 20 seconds |
 | `-o`, `--output <dir>`       | Where `report.json` and the `*.txt` lists are written. Default: `schemata.out`           |
 | `-f`, `--file <glob>`        | Examine only files matching a glob; may be repeated. A glob with a `/` matches the whole path, one without matches a file or directory name anywhere |
+| `--allow-empty`              | Do not fail when a `--file` glob matches no mutants. Without it such a run exits with 1, names the glob and runs nothing, so that a renamed or removed file cannot leave its module untested while CI stays green |
 | `-e`, `--exclude <glob>`     | Leave out files matching a glob; applied after `--file`                                  |
 | `-F`, `--re <regex>`         | Examine only mutants whose name (as listed, with line and column) matches                |
 | `-E`, `--exclude-re <regex>` | Leave out mutants whose name matches                                                     |
@@ -271,7 +272,7 @@ cargo schemata: FAILED (17 caught, 4 missed, 1 timeout, 2 unviable in 13.1s)
 | Exit code | Meaning                                                                                  |
 | --------- | ---------------------------------------------------------------------------------------- |
 | 0         | No mutant was missed (`cargo schemata: OK (...)`)                                        |
-| 1         | A mutant was missed, the tests fail without a mutant, something could not be built or run, or another run is at work in the package. For `merge`: a mutant was missed, or the parts are not all the parts of one run |
+| 1         | A mutant was missed, a `--file` glob matches no mutants (unless `--allow-empty`), the tests fail without a mutant, something could not be built or run, or another run is at work in the package. For `merge`: a mutant was missed, or the parts are not all the parts of one run |
 | 2         | Wrong usage: an unknown option, `--jobs 0`, a `--timeout` that is not positive, a `--shard` that is not `k/n` with `k < n`, an unknown key in `.cargo/mutants.toml`, options this version does not have (`--html`) |
 | 5         | `--in-diff`: the diff is out of date with the source tree (the exit code of cargo-mutants) |
 | 6         | `--in-diff`: the diff cannot be read or parsed                                           |
@@ -350,7 +351,7 @@ fail the run.
 ### Several mutants at a time
 
 `-j <n>` runs `n` mutants at the same time, each in its own test processes with
-its own `TMPDIR` (`<target dir>/schemata/tmp/<job>`). The processes share the
+its own `TMPDIR` (`<job>` in a directory of its own below the temporary directory of the system, `cargo-schemata-<pid>-...`; it is outside the repository, and it is removed when the run ends, read-only directories included). The processes share the
 working directory of the package copy: tests that write files there, or bind a
 fixed port, can disturb each other, so give `-j 1` for such a package. The
 default is a quarter of the logical processors, at least 1 and at most 4.

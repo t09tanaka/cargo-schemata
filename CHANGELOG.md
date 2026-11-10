@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased (0.2.0)
+
+- **Breaking: a `--file` glob that matches no mutants fails the run.** The run
+  names the glob, runs nothing and exits with 1, where it used to pass with zero
+  mutants (a renamed file left its module untested with CI green). `--allow-empty`
+  restores the old behavior.
+- **The temporary directory of the tests is outside the repository.** `TMPDIR`
+  for the test processes was `target/schemata/tmp`, inside the repository under
+  test, so a test that expects its temporary directory to be outside git ended up
+  in the repository above. It is now a directory of its own for each run below
+  the temporary directory of the system, so `GIT_CEILING_DIRECTORIES` is no longer
+  needed.
+- **Read-only leftovers are cleaned.** Write permission is restored recursively
+  before a temporary directory is deleted, so a mutant that was killed at the
+  timeout cannot leave directories that fail the next run. The run's directory is
+  removed when the run ends, and what an earlier version left in
+  `target/schemata/tmp` is cleared.
+
 ## 0.1.0
 
 The first release: mutation testing for Rust that builds the mutants once, as

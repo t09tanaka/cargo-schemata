@@ -24,6 +24,7 @@ mod route;
 mod shard;
 mod span;
 mod sync;
+mod tmpdir;
 mod visit;
 mod workspace;
 
@@ -92,6 +93,11 @@ struct Args {
     /// containing a slash match the whole path.
     #[arg(long, short = 'f', help_heading = "Filters")]
     file: Vec<String>,
+
+    /// Do not fail when a `--file` glob matches no mutants (a file that was
+    /// renamed or removed). By default such a run exits with 1 and names the glob.
+    #[arg(long, help_heading = "Filters")]
+    allow_empty: bool,
 
     /// Glob for files to exclude; applied after `--file`.
     #[arg(long, short = 'e', help_heading = "Filters")]
@@ -280,6 +286,8 @@ struct Setup {
     workspace: Workspace,
     packages: Vec<Arc<Package>>,
     mutants: Vec<Mutant>,
+    /// The `--file` globs that match no mutant of the tree.
+    empty_globs: Vec<String>,
     /// `--in-diff` left nothing to test (the diff is empty, or touches no mutant).
     diff_left_nothing: bool,
 }
@@ -333,6 +341,16 @@ fn discover(args: &Args) -> Result<Setup> {
     let packages = workspace.select(&package_filter)?;
     let mut mutants = visit::walk_tree(workspace.root(), &packages, &options)
         .context("failed to discover mutants")?;
+    let mut empty_globs = Vec::new();
+    for glob in &args.file {
+        let set = options::build_glob_set([glob])?;
+        if !mutants.iter().any(|m| {
+            set.as_ref()
+                .is_some_and(|s| s.is_match(m.file.as_std_path()))
+        }) {
+            empty_globs.push(glob.clone());
+        }
+    }
     let mut diff_left_nothing = false;
     if let Some(diff_path) = &args.in_diff {
         mutants = match in_diff::diff_filter_file(mutants, diff_path) {
@@ -350,6 +368,7 @@ fn discover(args: &Args) -> Result<Setup> {
         workspace,
         packages,
         mutants,
+        empty_globs,
         diff_left_nothing,
     })
 }
@@ -406,8 +425,18 @@ fn run_tests(args: &Args) -> Result<i32> {
         workspace,
         packages,
         mutants: all_mutants,
+        empty_globs,
         ..
     } = setup;
+    if !empty_globs.is_empty() && !args.allow_empty {
+        for glob in &empty_globs {
+            eprintln!("cargo schemata: no mutants in files matching --file {glob}");
+        }
+        eprintln!(
+            "cargo schemata: FAILED (a --file glob matches no mutants, so that code would not be tested; fix the glob, or pass --allow-empty)"
+        );
+        return Ok(1);
+    }
     // The mutants of this part of the run; the report lists all of them.
     let mutants = part_of(&all_mutants, args.shard);
     let json = args.json;
@@ -423,12 +452,13 @@ fn run_tests(args: &Args) -> Result<i32> {
     let _lock = lock::Lock::acquire(&schemata)?;
     let out_dir = args.output.as_std_path();
     results::clear_output(out_dir)?;
-    let tmp_root = schemata.join("tmp");
-    match std::fs::remove_dir_all(&tmp_root) {
-        Ok(()) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => return Err(e).context("remove the temporary directories of the last run"),
-    }
+    // Versions before 0.2.0 kept the temporary directories in the target
+    // directory; clear what they left.
+    tmpdir::force_remove_dir_all(&schemata.join("tmp"))
+        .context("remove the temporary directories of an earlier version")?;
+    // Outside the repository under test; removed when the run ends.
+    let run_tmp = tmpdir::RunTmp::create()?;
+    let tmp_root = run_tmp.path().to_owned();
     let names: HashMap<usize, String> = mutants.iter().map(|m| (m.id, m.name(true))).collect();
     let by_id: HashMap<usize, &Mutant> = mutants.iter().map(|m| (m.id, m)).collect();
     let explicit = args.timeout.map(Duration::from_secs_f64);
