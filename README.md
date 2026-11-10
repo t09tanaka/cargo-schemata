@@ -64,7 +64,7 @@ static initializers are listed like any other code.
 | `--json`                     | Print JSON: the report of a run, or the list as `cargo mutants --list --json` does       |
 | `-j`, `--jobs <n>`           | How many test processes run at a time. Default: a quarter of the processors, at least 1 and at most 4 |
 | `--no-routing`               | Run every test for every mutant, and do not end a run at the first failed test (see "Routing") |
-| `-t`, `--timeout <secs>`     | What one mutant's tests may take. Default: five times the time of the tests without a mutant, at least 20 seconds |
+| `-t`, `--timeout <secs>`     | What one mutant's tests may take. Default: five times the time, without a mutant, of the tests the mutant runs: at least 10 seconds for the tests routing picks, and for all tests at least 20 seconds, which is also the most a mutant gets (see "Time limits") |
 | `-o`, `--output <dir>`       | Where `report.json` and the `*.txt` lists are written. Default: `schemata.out`           |
 | `-f`, `--file <glob>`        | Examine only files matching a glob; may be repeated. A glob with a `/` matches the whole path, one without matches a file or directory name anywhere |
 | `--allow-empty`              | Do not fail when a `--file` glob, or an `examine_globs` glob of `.cargo/mutants.toml`, matches no mutants. Without it such a run exits with 1, names the glob (and whether it came from `--file` or the config file) and runs nothing, after clearing the report of an earlier run in `-o`, so that a renamed or removed file cannot leave its module untested while CI stays green. See [Empty globs](#empty-globs) |
@@ -230,7 +230,7 @@ A plain `cargo schemata` builds as described above, then:
 
 1. **Baseline.** Every test binary is started once without a mutant. They have to
    pass: otherwise nothing is run, the end of the output of the failing binary is
-   shown, and the exit code is 1. The time of the baseline sets the time limit.
+   shown, and the exit code is 1. The time of the baseline sets the upper bound of the time limit.
 2. **Routing** (unless `--no-routing`): every test is run once alone to learn
    which mutants it reaches, so that each mutant is run against those tests only.
    See "Routing" below.
@@ -261,7 +261,8 @@ src/lib.rs:24:18: replace + with * in join ... unviable in 0.0s
 mutants: run in 2.4s
 ```
 
-The parenthesized times are the stages: the build, the baseline, the tracing of
+This run had `--timeout 3`; without it the second line reads `a mutant gets at
+most 20s`, the upper bound (see "Time limits"). The parenthesized times are the stages: the build, the baseline, the tracing of
 each test, and the run of the mutants.
 
 When the run ends, the missed mutants, one line each, then the last line, both on
@@ -344,9 +345,35 @@ the old behaviour (every test, no early end):
 
 ### Time limits
 
-A mutant's tests get `max(20 seconds, 5 x the baseline, rounded up to the second)`,
-the rule of cargo-mutants 27.1.0, for all test binaries together; `--timeout`
-replaces it. Every test binary is started in a process group of its own. When
+A mutant that runs every test gets `max(20 seconds, 5 x the baseline, rounded up
+to the second)`, the rule of cargo-mutants 27.1.0, for all test binaries
+together. That is the limit with `--no-routing`, for the mutants built on their
+own, and for a mutant that no single test reaches alone.
+
+With routing a mutant runs only the tests that reach it, so the limit comes from
+those tests:
+
+```
+limit = min(the limit above, max(10 seconds, 5 x its tests, rounded up to the second))
+```
+
+"Its tests" is what the plan for the mutant took without a mutant: for the tests
+that are named on the command line, the sum of what each took when it ran alone
+during tracing (each with the start of a process, so more than they take
+together), and for a binary that runs whole, the time of that binary in the
+baseline. A mutant in an endless loop whose tests take milliseconds is given up
+after 10 seconds, not after five times the whole test suite. The limit is never
+less than five times what the tests took, and never less than 10 seconds, so a
+mutant that only makes its tests a few times slower still ends as caught or
+missed; one that makes them more than five times slower (and longer than 10
+seconds) is a `timeout`, as it always was with the whole-suite rule. The first
+line of the progress shows the upper bound (`a mutant gets at most 116s`), and
+`statusReason` of a `Timeout` in the report says which limit that mutant had.
+
+`--timeout <secs>` replaces all of this: every mutant gets exactly that, with or
+without routing.
+
+Every test binary is started in a process group of its own. When
 the limit is reached the whole group gets SIGKILL, so processes the tests
 started do not stay behind. The group is also killed when a test binary has
 exited and left processes running. The mutant is a `timeout`, which does not
@@ -360,9 +387,12 @@ working directory of the package copy: tests that write files there, or bind a
 fixed port, can disturb each other, so give `-j 1` for such a package. The
 default is a quarter of the logical processors, at least 1 and at most 4.
 
-With `-j 2` or more, a mutant that reaches the limit may only be slow because of
-the load. Those are run again alone, with the same limit, after the others, and
-take the status of that second run.
+With `-j 2` or more, a mutant that reaches its limit may only be slow because of
+the load. Those are run again alone, each with the same limit it had, after the
+others, and take the status of that second run. A mutant that really hangs
+therefore costs its limit twice; with the limit taken from its own tests that is
+usually 2 x 10 seconds. The second run is kept on purpose: a `timeout` does not
+fail the run, so a mutant that was only slow under load must not end as one.
 
 ### The output
 

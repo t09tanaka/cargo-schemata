@@ -15,7 +15,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -107,6 +107,10 @@ struct BinRoute {
     /// Its tests were run alone and all passed; otherwise it always runs whole.
     traced: bool,
     tests: Vec<String>,
+    /// What each test took when it ran alone, process start included.
+    times: Vec<Duration>,
+    /// What the whole binary took in the baseline.
+    whole: Duration,
 }
 
 /// What to do for one mutant.
@@ -129,21 +133,33 @@ pub struct Routing {
 }
 
 impl Routing {
-    pub fn plan(&self, id: usize, nbins: usize) -> Plan {
+    #[cfg(test)]
+    fn plan(&self, id: usize, nbins: usize) -> Plan {
+        self.plan_and_estimate(id, nbins).0
+    }
+
+    /// The plan, and what its steps took without a mutant: the baseline time
+    /// of a binary that runs whole, and for listed tests the sum of what each
+    /// took alone (more than they take together in one process). `None` when
+    /// every binary runs whole because no single test reaches the mutant: the
+    /// time of the whole baseline is the estimate then.
+    pub fn plan_and_estimate(&self, id: usize, nbins: usize) -> (Plan, Option<Duration>) {
         let whole = |bin: usize| Step { bin, args: None };
         if !self.global.contains(&id) {
-            return Plan::Unreached;
+            return (Plan::Unreached, None);
         }
         let hits = self.reach.get(&id);
         let any = hits.is_some_and(|h| h.iter().any(|b| !b.is_empty()));
         if !any {
-            return Plan::Steps((0..nbins).map(whole).collect());
+            return (Plan::Steps((0..nbins).map(whole).collect()), None);
         }
         let hits = hits.expect("any hit");
         let mut steps = Vec::new();
+        let mut estimate = Duration::ZERO;
         for (bin, route) in self.bins.iter().enumerate() {
             if !route.traced {
                 steps.push(whole(bin));
+                estimate += route.whole;
                 continue;
             }
             let tests = &hits[bin];
@@ -155,8 +171,10 @@ impl Routing {
                 || bytes > MAX_NAMES_BYTES
             {
                 steps.push(whole(bin));
+                estimate += route.whole;
                 continue;
             }
+            estimate += tests.iter().map(|&t| route.times[t]).sum::<Duration>();
             let mut args = self.rest.clone();
             if !args.iter().any(|a| a == "--exact") {
                 args.push("--exact".to_owned());
@@ -167,7 +185,7 @@ impl Routing {
                 args: Some(args),
             });
         }
-        Plan::Steps(steps)
+        (Plan::Steps(steps), Some(estimate))
     }
 }
 
@@ -197,12 +215,20 @@ pub fn trace_budget(baseline: Duration) -> Duration {
     (baseline * TRACE_BUDGET_MULTIPLIER).max(MIN_TRACE_BUDGET)
 }
 
+/// What the baseline found out about the binaries, one entry per binary.
+pub struct BaselineRun<'a> {
+    /// Its output is libtest's.
+    pub libtest: &'a [bool],
+    /// What it took.
+    pub took: &'a [Duration],
+}
+
 /// List the tests of each libtest binary and run each alone, `jobs` at a time,
-/// recording the mutants it reaches.
+/// recording the mutants it reaches and the time it takes.
 pub fn trace(
     tests: &Tests,
     bins: &[TestBinary],
-    libtest: &[bool],
+    baseline: &BaselineRun,
     global: HashSet<usize>,
     jobs: usize,
     budget: Duration,
@@ -216,7 +242,7 @@ pub fn trace(
 
     let mut routes: Vec<BinRoute> = Vec::new();
     for (n, bin) in bins.iter().enumerate() {
-        let mut traced = libtest.get(n).copied().unwrap_or(false);
+        let mut traced = baseline.libtest.get(n).copied().unwrap_or(false);
         let mut names = Vec::new();
         if traced {
             let mut args = tests.bin_args.to_vec();
@@ -235,7 +261,9 @@ pub fn trace(
         }
         routes.push(BinRoute {
             traced,
+            times: vec![Duration::ZERO; names.len()],
             tests: names,
+            whole: baseline.took.get(n).copied().unwrap_or_default(),
         });
     }
 
@@ -246,14 +274,17 @@ pub fn trace(
         .flat_map(|(b, r)| (0..r.tests.len()).map(move |t| (b, t)))
         .collect();
     let broken: Vec<AtomicBool> = routes.iter().map(|_| AtomicBool::new(false)).collect();
+    // Microseconds each run took, in the order of `work`.
+    let micros: Vec<AtomicU64> = work.iter().map(|_| AtomicU64::new(0)).collect();
     let over = AtomicBool::new(false);
     let next = AtomicUsize::new(0);
     let error: Mutex<Option<anyhow::Error>> = Mutex::new(None);
     let file = |b: usize, t: usize| dir.join(format!("{b}-{t}.txt"));
     std::thread::scope(|scope| {
         for worker in 0..jobs.min(work.len()).max(1) {
-            let (routes, broken, over, next, error, work, file) =
-                (&routes, &broken, &over, &next, &error, &work, &file);
+            let (routes, broken, over, next, error, work, file, micros) = (
+                &routes, &broken, &over, &next, &error, &work, &file, &micros,
+            );
             let rest = &split.rest;
             scope.spawn(move || {
                 let job = format!("trace-{worker}");
@@ -276,11 +307,14 @@ pub fn trace(
                         args.push(routes[b].tests[t].clone());
                         let path = file(b, t);
                         let _ = std::fs::remove_file(&path);
+                        let began = Instant::now();
                         let fin = run_group(
                             &mut tests.command(&bins[b], &args, None, Some(&path), &tmp),
                             Some(timeout),
                             &Sink::Null,
                         )?;
+                        let took = u64::try_from(began.elapsed().as_micros()).unwrap_or(u64::MAX);
+                        micros[i].store(took, Ordering::Relaxed);
                         Ok(fin.status.is_some_and(|s| s.success()))
                     };
                     match one() {
@@ -302,6 +336,9 @@ pub fn trace(
         return Ok(TraceResult::GaveUp(start.elapsed()));
     }
 
+    for (&(b, t), took) in work.iter().zip(&micros) {
+        routes[b].times[t] = Duration::from_micros(took.load(Ordering::Relaxed));
+    }
     let mut reach: HashMap<usize, Vec<Vec<usize>>> = HashMap::new();
     let mut count = 0;
     for (b, route) in routes.iter_mut().enumerate() {
@@ -390,11 +427,22 @@ mod tests {
         );
     }
 
+    impl Routing {
+        fn times_mut(&mut self) -> &mut Vec<Duration> {
+            &mut self.bins[0].times
+        }
+    }
+
     fn routing(traced: bool, tests: usize) -> Routing {
         Routing {
             bins: vec![BinRoute {
                 traced,
                 tests: (0..tests).map(|i| format!("t{i}")).collect(),
+                // t0 took 100 ms alone, t1 200 ms, ...
+                times: (1..=tests as u64)
+                    .map(|i| Duration::from_millis(i * 100))
+                    .collect(),
+                whole: Duration::from_secs(7),
             }],
             rest: v(&["--test-threads", "2"]),
             global: [1, 2, 3].into(),
@@ -431,5 +479,92 @@ mod tests {
         assert_eq!(routing(true, 2).plan(1, 1), whole);
         // 2 of 4 is below 80%
         assert_ne!(routing(true, 4).plan(1, 1), whole);
+    }
+
+    #[test]
+    fn the_estimate_is_the_time_of_the_steps_of_the_plan() {
+        let est = |r: &Routing, id| r.plan_and_estimate(id, 1).1;
+        // the tests t0 and t1, each run alone: 100 ms + 200 ms
+        assert_eq!(est(&routing(true, 10), 1), Some(Duration::from_millis(300)));
+        // a binary that runs whole (not traced, or mostly reached): its baseline
+        assert_eq!(est(&routing(false, 10), 1), Some(Duration::from_secs(7)));
+        assert_eq!(est(&routing(true, 2), 1), Some(Duration::from_secs(7)));
+        // no single test reaches it, so everything runs: the whole baseline
+        assert_eq!(est(&routing(true, 10), 2), None);
+        assert_eq!(est(&routing(true, 10), 3), None);
+        // not reached at all: nothing runs
+        assert_eq!(
+            routing(true, 10).plan_and_estimate(9, 1),
+            (Plan::Unreached, None)
+        );
+        // the plan is the same one
+        for id in [1, 2, 3, 9] {
+            let r = routing(true, 10);
+            assert_eq!(r.plan_and_estimate(id, 1).0, r.plan(id, 1));
+        }
+    }
+
+    #[test]
+    fn the_limit_of_a_mutant_follows_its_plan_unless_it_was_given() {
+        use crate::exec::Pool;
+        let secs = Duration::from_secs;
+        let mut r = routing(true, 10);
+        // t9 takes 4 s alone: a mutant that only it reaches gets 20 s
+        r.times_mut()[9] = secs(4);
+        r.global.insert(4);
+        r.reach.insert(4, vec![vec![9]]);
+        let pool = Pool {
+            jobs: 2,
+            timeout: secs(116),
+            per_mutant: true,
+            routing: Some(&r),
+        };
+        // 300 ms of tests: the floor
+        assert_eq!(pool.limit(1, 1), secs(10));
+        assert_eq!(pool.limit(4, 1), secs(20));
+        // every test runs (no single test reaches it): the whole limit
+        assert_eq!(pool.limit(2, 1), secs(116));
+        // an explicit limit is the limit of every mutant
+        let given = Pool {
+            timeout: secs(3),
+            per_mutant: false,
+            ..pool
+        };
+        for id in [1, 2, 4] {
+            assert_eq!(given.limit(id, 1), secs(3));
+        }
+        // and so is the whole limit without routing
+        let unrouted = Pool {
+            routing: None,
+            ..pool
+        };
+        assert_eq!(unrouted.limit(1, 1), secs(116));
+        // a binary that runs whole: five times its baseline of 7 s
+        let whole = routing(false, 10);
+        let pool = Pool {
+            routing: Some(&whole),
+            ..pool
+        };
+        assert_eq!(pool.limit(1, 1), secs(35));
+    }
+
+    #[test]
+    fn two_binaries_add_up() {
+        let mut r = routing(true, 10);
+        r.bins.push(BinRoute {
+            traced: false,
+            tests: Vec::new(),
+            times: Vec::new(),
+            whole: Duration::from_secs(2),
+        });
+        r.reach = HashMap::from([(1, vec![vec![2], vec![]])]);
+        let (plan, estimate) = r.plan_and_estimate(1, 2);
+        // t2 alone (300 ms) and the second binary whole (2 s)
+        assert_eq!(estimate, Some(Duration::from_millis(2300)));
+        let Plan::Steps(steps) = plan else {
+            panic!("steps")
+        };
+        assert_eq!(steps.len(), 2);
+        assert_eq!(steps[1], Step { bin: 1, args: None });
     }
 }

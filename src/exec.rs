@@ -32,6 +32,25 @@ pub fn mutant_timeout(baseline: Duration, explicit: Option<Duration>) -> Duratio
     })
 }
 
+/// The least time a mutant gets when the limit comes from its own tests.
+const MINIMUM_ROUTED_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The time a mutant gets that runs only some of the tests: five times what
+/// those tests took without a mutant (`estimate`), rounded up to the second and
+/// at least 10 seconds, but never more than `whole`, the limit of a mutant that
+/// runs every test ([`mutant_timeout`]).
+///
+/// A mutant in an endless loop is then given up after seconds, not after five
+/// times the whole test suite. The floor is far above what the tests of most
+/// mutants take, so that a slow machine, a loaded one, or a mutant that makes
+/// its tests several times slower without hanging is not taken for a time-out.
+pub fn routed_timeout(estimate: Duration, whole: Duration) -> Duration {
+    let own = MINIMUM_ROUTED_TIMEOUT.max(Duration::from_secs_f64(
+        (estimate.as_secs_f64() * TIMEOUT_MULTIPLIER).ceil(),
+    ));
+    own.min(whole)
+}
+
 /// A quarter of the processors, at least 1 and at most 4.
 pub fn default_jobs() -> usize {
     let cpus = std::thread::available_parallelism().map_or(1, usize::from);
@@ -159,6 +178,8 @@ impl Tests<'_> {
 pub enum Baseline {
     Passed {
         took: Duration,
+        /// What each binary took.
+        took_each: Vec<Duration>,
         /// Per binary: its output is libtest's (`running N tests`), so it
         /// understands `--list` and `--exact`.
         libtest: Vec<bool>,
@@ -182,9 +203,11 @@ impl Tests<'_> {
         let tmp = self.tmp("baseline")?;
         let start = Instant::now();
         let mut libtest = Vec::new();
+        let mut took_each = Vec::new();
         for (n, bin) in bins.iter().enumerate() {
             let log = tmp.join(format!("baseline-{n}.log"));
             let left = limit.map(|t| t.saturating_sub(start.elapsed()));
+            let began = Instant::now();
             let fin = run_group(
                 &mut self.command(bin, self.bin_args, None, trace, &tmp),
                 left,
@@ -204,6 +227,7 @@ impl Tests<'_> {
                 }
                 Some(_) => {}
             }
+            took_each.push(began.elapsed());
             let text = std::fs::read_to_string(&log).unwrap_or_default();
             libtest.push(text.lines().any(|l| {
                 l.starts_with("running ") && l.ends_with(" tests") || l == "running 1 test"
@@ -211,6 +235,7 @@ impl Tests<'_> {
         }
         Ok(Baseline::Passed {
             took: start.elapsed(),
+            took_each,
             libtest,
         })
     }
@@ -220,15 +245,15 @@ impl Tests<'_> {
 fn run_one(
     tests: &Tests,
     bins: &[TestBinary],
-    routing: Option<&Routing>,
+    pool: &Pool,
     id: usize,
     job: &str,
-    timeout: Duration,
 ) -> Result<(Ran, Duration)> {
-    match routing.map(|r| r.plan(id, bins.len())) {
-        None => tests.run(bins, Some(id), job, Some(timeout)),
+    let (plan, limit) = pool.plan(id, bins.len());
+    match plan {
+        None => tests.run(bins, Some(id), job, Some(limit)),
         Some(Plan::Unreached) => Ok((Ran::Unreached, Duration::ZERO)),
-        Some(Plan::Steps(steps)) => tests.run_steps(bins, &steps, Some(id), job, Some(timeout)),
+        Some(Plan::Steps(steps)) => tests.run_steps(bins, &steps, Some(id), job, Some(limit)),
     }
 }
 
@@ -238,15 +263,41 @@ pub struct Rerun {
 }
 
 /// How the mutants are run.
+#[derive(Clone, Copy)]
 pub struct Pool<'a> {
     pub jobs: usize,
+    /// The limit of a mutant that runs every test, or the explicit limit.
     pub timeout: Duration,
+    /// With routing, a mutant's limit comes from the tests it runs
+    /// ([`routed_timeout`]). False when the limit was given explicitly.
+    pub per_mutant: bool,
     pub routing: Option<&'a Routing>,
+}
+
+impl Pool<'_> {
+    /// What routing plans for the mutant (`None` without routing), and its limit.
+    fn plan(&self, id: usize, nbins: usize) -> (Option<Plan>, Duration) {
+        let Some(routing) = self.routing else {
+            return (None, self.timeout);
+        };
+        let (plan, estimate) = routing.plan_and_estimate(id, nbins);
+        let limit = match estimate {
+            Some(estimate) if self.per_mutant => routed_timeout(estimate, self.timeout),
+            _ => self.timeout,
+        };
+        (Some(plan), limit)
+    }
+
+    /// The time the tests of this mutant get, in the parallel run and when it
+    /// is run again alone.
+    pub fn limit(&self, id: usize, nbins: usize) -> Duration {
+        self.plan(id, nbins).1
+    }
 }
 
 /// Run the mutants `ids` against the embedded test binaries, `jobs` at a time.
 ///
-/// With two or more jobs a mutant that reaches the limit may only be slow
+/// With two or more jobs a mutant that reaches its limit may only be slow
 /// because of the load: it is run again alone at the end, with the same limit,
 /// and takes the status of that second run. `done` is called once per mutant,
 /// with its final status.
@@ -258,11 +309,7 @@ pub fn run_embedded(
     done: &(dyn Fn(usize, Ran, Duration) + Sync),
     rerun_note: &(dyn Fn(Rerun) + Sync),
 ) -> Result<Vec<(usize, Ran, Duration)>> {
-    let Pool {
-        jobs,
-        timeout,
-        routing,
-    } = *pool;
+    let jobs = pool.jobs;
     let next = AtomicUsize::new(0);
     let stop = AtomicBool::new(false);
     let results: Mutex<Vec<(usize, Ran, Duration)>> = Mutex::new(Vec::new());
@@ -275,7 +322,7 @@ pub fn run_embedded(
                 while !stop.load(Ordering::Relaxed) {
                     let i = next.fetch_add(1, Ordering::Relaxed);
                     let Some(&id) = ids.get(i) else { break };
-                    match run_one(tests, bins, routing, id, &job, timeout) {
+                    match run_one(tests, bins, pool, id, &job) {
                         Ok((ran, took)) => {
                             if !(ran == Ran::Timeout && jobs >= 2) {
                                 done(id, ran, took);
@@ -305,7 +352,7 @@ pub fn run_embedded(
             rerun_note(Rerun { count: slow.len() });
         }
         for id in slow {
-            let (ran, took) = run_one(tests, bins, routing, id, "0", timeout)?;
+            let (ran, took) = run_one(tests, bins, pool, id, "0")?;
             done(id, ran, took);
             if let Some(r) = results.iter_mut().find(|r| r.0 == id) {
                 *r = (id, ran, took);
@@ -338,6 +385,25 @@ mod tests {
     fn an_explicit_timeout_wins() {
         assert_eq!(mutant_timeout(secs(100), Some(secs(3))), secs(3));
         assert_eq!(mutant_timeout(secs(1), Some(secs(90))), secs(90));
+    }
+
+    #[test]
+    fn a_routed_mutant_gets_five_times_its_tests_between_ten_seconds_and_the_whole_limit() {
+        let ms = Duration::from_millis;
+        // most mutants: tests of milliseconds, so the floor
+        assert_eq!(routed_timeout(Duration::ZERO, secs(116)), secs(10));
+        assert_eq!(routed_timeout(ms(100), secs(116)), secs(10));
+        assert_eq!(routed_timeout(secs(2), secs(116)), secs(10));
+        // five times, rounded up to the second
+        assert_eq!(routed_timeout(ms(2001), secs(116)), secs(11));
+        assert_eq!(routed_timeout(secs(3), secs(116)), secs(15));
+        assert_eq!(routed_timeout(ms(3100), secs(116)), secs(16));
+        // never more than a mutant that runs every test
+        assert_eq!(routed_timeout(secs(23), secs(116)), secs(115));
+        assert_eq!(routed_timeout(ms(23_200), secs(116)), secs(116));
+        assert_eq!(routed_timeout(secs(60), secs(116)), secs(116));
+        assert_eq!(routed_timeout(secs(3), secs(20)), secs(15));
+        assert_eq!(routed_timeout(secs(5), secs(20)), secs(20));
     }
 
     #[test]
@@ -597,6 +663,7 @@ mod tests {
             &Pool {
                 jobs: 2,
                 timeout: Duration::from_millis(400),
+                per_mutant: true,
                 routing: None,
             },
             &|id, ran, _| seen.lock().unwrap().push((id, ran)),

@@ -269,6 +269,63 @@ fn every_outcome_is_reported_and_one_run_at_a_time() {
     kit.assert_no_children_left();
 }
 
+/// Without `--timeout`, the limit of a routed mutant comes from the tests
+/// that reach it (milliseconds here, so the floor of 10 s), not from the whole
+/// test suite (20 s at least). With two jobs it is run again alone, with the
+/// same limit.
+#[test]
+fn a_mutant_in_an_endless_loop_gets_the_limit_of_its_own_tests() {
+    let kit = Kit::new("loop");
+    let start = Instant::now();
+    let out = kit
+        .command(&["--re", "count_to", "-j", "2"])
+        .output()
+        .unwrap();
+    let took = start.elapsed();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    // a time-out does not fail the run, and nothing else survives
+    assert_eq!(out.status.code(), Some(0), "{stdout}\n{stderr}");
+    assert!(
+        stdout.contains("; a mutant gets at most "),
+        "the limit of the whole suite is the upper bound: {stdout}"
+    );
+    assert!(
+        stdout.contains("1 mutant(s) did not end within their time limit and are run again alone"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("replace += with *= in count_to ... timeout in 10."),
+        "{stdout}"
+    );
+    let report = kit.report();
+    let timeout = report["files"]["src/lib.rs"]["mutants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["status"] == "Timeout")
+        .unwrap();
+    assert_eq!(timeout["statusReason"], "did not end within 10s");
+    // the time of the run alone, which is the one that counts
+    let millis = timeout["duration"].as_u64().unwrap();
+    assert!((10_000..15_000).contains(&millis), "{millis} ms");
+    assert_eq!(
+        status_of(&report, "replace += with -= in count_to"),
+        "Killed"
+    );
+    // two runs of 10 s and the build; two runs of the old 20 s would not fit
+    // (the build and the rest take a few seconds)
+    let line = stdout
+        .lines()
+        .find(|l| l.starts_with("mutants: run in "))
+        .unwrap_or_else(|| panic!("{stdout}"));
+    let secs: f64 = line["mutants: run in ".len()..line.len() - 1]
+        .parse()
+        .unwrap();
+    assert!((20.0..35.0).contains(&secs), "{line} (all: {took:?})");
+    kit.assert_no_children_left();
+}
+
 #[test]
 fn no_survivor_exits_zero_and_json_is_the_only_thing_on_stdout() {
     let kit = Kit::new("ok");

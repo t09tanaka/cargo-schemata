@@ -45,9 +45,14 @@ pub struct MutantResult {
     pub id: usize,
     pub status: Status,
     pub duration: Duration,
-    /// Why, for an unviable mutant (the compiler's first error) or a missed
-    /// one that no test reached.
+    /// Why, for an unviable mutant (the compiler's first error), a missed one
+    /// that no test reached, or a time-out ([`timeout_reason`]).
     pub reason: Option<String>,
+}
+
+/// The reason of a time-out: the limit this mutant had.
+pub fn timeout_reason(limit: Duration) -> String {
+    format!("did not end within {}s", limit.as_secs())
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -115,7 +120,6 @@ pub fn clear_output(dir: &Path) -> Result<()> {
 pub fn report_json(
     mutants: &[Mutant],
     results: &[MutantResult],
-    timeout: Option<Duration>,
     shard: Option<(usize, usize)>,
 ) -> Value {
     let mut order: Vec<String> = Vec::new();
@@ -142,15 +146,7 @@ pub fn report_json(
             "status": r.map_or("Pending", |r| r.status.element()),
             "duration": r.map_or(0, |r| r.duration.as_millis() as u64),
         });
-        let reason = match r {
-            Some(r) if r.status == Status::Unviable || r.status == Status::Missed => {
-                r.reason.clone()
-            }
-            Some(r) if r.status == Status::Timeout => {
-                timeout.map(|t| format!("did not end within {}s", t.as_secs()))
-            }
-            _ => None,
-        };
+        let reason = r.and_then(|r| r.reason.clone());
         order.push(v["id"].as_str().unwrap_or_default().to_owned());
         if let Some(reason) = reason {
             v["statusReason"] = Value::String(reason);
