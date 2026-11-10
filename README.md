@@ -2,7 +2,7 @@
 
 Mutation testing for Rust that builds mutants once, as schemata.
 
-**Status: 0.2.0.** Listing the mutants (`--list`), building them (`--build-only`) and running the tests on them (a plain `cargo schemata`) work, and so do `--in-diff` (only the code a diff changes) and `--shard` with `merge` (a run in several parts). Unix only: Linux and macOS (Windows is not supported). There is no `--html`, and results of an earlier run are not reused (see "Differences from cargo-mutants").
+**Status: 0.3.0.** Listing the mutants (`--list`), building them (`--build-only`) and running the tests on them (a plain `cargo schemata`) work, and so do `--in-diff` (only the code a diff changes) and `--shard` with `merge` (a run in several parts). Unix only: Linux and macOS (Windows is not supported). There is no `--html`, and results of an earlier run are not reused (see "Differences from cargo-mutants").
 
 ## Goal
 
@@ -64,7 +64,7 @@ static initializers are listed like any other code.
 | `--json`                     | Print JSON: the report of a run, or the list as `cargo mutants --list --json` does       |
 | `-j`, `--jobs <n>`           | How many test processes run at a time. Default: a quarter of the processors, at least 1 and at most 4 |
 | `--no-routing`               | Run every test for every mutant, and do not end a run at the first failed test (see "Routing") |
-| `-t`, `--timeout <secs>`     | What one mutant's tests may take. Default: five times the time of the tests without a mutant, at least 20 seconds |
+| `-t`, `--timeout <secs>`     | What one mutant's tests may take. Default: five times the time of the tests without a mutant, at least 20 seconds. With routing and two or more jobs, a first run is given up sooner and run again alone with this limit (see "Time limits") |
 | `-o`, `--output <dir>`       | Where `report.json` and the `*.txt` lists are written. Default: `schemata.out`           |
 | `-f`, `--file <glob>`        | Examine only files matching a glob; may be repeated. A glob with a `/` matches the whole path, one without matches a file or directory name anywhere |
 | `--allow-empty`              | Do not fail when a `--file` glob, or an `examine_globs` glob of `.cargo/mutants.toml`, matches no mutants. Without it such a run exits with 1, names the glob (and whether it came from `--file` or the config file) and runs nothing, after clearing the report of an earlier run in `-o`, so that a renamed or removed file cannot leave its module untested while CI stays green. See [Empty globs](#empty-globs) |
@@ -346,7 +346,32 @@ the old behaviour (every test, no early end):
 
 A mutant's tests get `max(20 seconds, 5 x the baseline, rounded up to the second)`,
 the rule of cargo-mutants 27.1.0, for all test binaries together; `--timeout`
-replaces it. Every test binary is started in a process group of its own. When
+replaces it. Only a mutant whose tests do not end within this limit is a
+`timeout`, with or without routing.
+
+With routing and two or more jobs, the *first* run of a mutant is given up
+sooner, because a routed mutant runs only the tests that reach it:
+
+```
+first run = min(the limit above, max(10 seconds, 5 x its tests, rounded up to the second))
+```
+
+"Its tests" is what the plan for the mutant took without a mutant: for the tests
+that are named on the command line, the sum of what each took when it ran alone
+during tracing (each with the start of a process, so more than they take
+together), and for a binary that runs whole, the time of that binary in the
+baseline. A first run that reaches this is not a result: the mutant is run again
+alone, after the others, with the limit above, and takes the status of that
+run. So a mutant that is slow but ends is caught or missed exactly as it is with
+one job or with `--no-routing`, and a mutant in an endless loop holds a job for
+about 10 seconds instead of the whole limit before it gets its run alone.
+
+The sooner limit is not used with one job (there is no second run, so the only
+run gets the whole limit), with `--timeout` (every run gets exactly that), with
+`--no-routing`, for the mutants built on their own, and for a mutant that no
+single test reaches alone.
+
+Every test binary is started in a process group of its own. When
 the limit is reached the whole group gets SIGKILL, so processes the tests
 started do not stay behind. The group is also killed when a test binary has
 exited and left processes running. The mutant is a `timeout`, which does not
@@ -360,9 +385,12 @@ working directory of the package copy: tests that write files there, or bind a
 fixed port, can disturb each other, so give `-j 1` for such a package. The
 default is a quarter of the logical processors, at least 1 and at most 4.
 
-With `-j 2` or more, a mutant that reaches the limit may only be slow because of
-the load. Those are run again alone, with the same limit, after the others, and
-take the status of that second run.
+With `-j 2` or more, a mutant that reaches the limit of its first run may only
+be slow because of the load, or because that limit was made from the time of its
+own tests (see "Time limits"). Those are run again alone, with the limit of the
+whole suite (or `--timeout`), after the others, and take the status of that
+second run. The second run is what decides: a `timeout` does not fail the run,
+so a mutant that was only slow must not end as one.
 
 ### The output
 

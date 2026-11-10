@@ -85,7 +85,8 @@ struct Args {
     no_routing: bool,
 
     /// Seconds one mutant's tests may take. Default: five times the time of
-    /// the tests without a mutant, at least 20.
+    /// the tests without a mutant, at least 20. With routing and two or more
+    /// jobs a first run is given up sooner, and run again alone with this.
     #[arg(long, short = 't', value_parser = parse_timeout, help_heading = "Execution")]
     timeout: Option<f64>,
 
@@ -512,7 +513,6 @@ fn run_tests(args: &Args) -> Result<i32> {
     let by_id: HashMap<usize, &Mutant> = mutants.iter().map(|m| (m.id, m)).collect();
     let explicit = args.timeout.map(Duration::from_secs_f64);
     let mut results: Vec<MutantResult> = Vec::new();
-    let mut limit = explicit;
 
     if mutants.is_empty() {
         say("no mutants to run".to_owned());
@@ -541,12 +541,16 @@ fn run_tests(args: &Args) -> Result<i32> {
         };
         let trace_file = tmp_root.join("trace-baseline.txt");
         let t = Instant::now();
-        let (baseline, libtest) = match tests.baseline(
+        let (baseline, took_each, libtest) = match tests.baseline(
             &prepared.test_binaries,
             explicit,
             route_ok.then_some(trace_file.as_path()),
         )? {
-            Baseline::Passed { took, libtest } => (took, libtest),
+            Baseline::Passed {
+                took,
+                took_each,
+                libtest,
+            } => (took, took_each, libtest),
             Baseline::Failed { binary, log_tail } => {
                 eprintln!("{log_tail}");
                 eprintln!(
@@ -563,7 +567,6 @@ fn run_tests(args: &Args) -> Result<i32> {
         };
         let jobs = args.jobs.map_or_else(exec::default_jobs, |j| j as usize);
         let timeout = exec::mutant_timeout(baseline, explicit);
-        limit = Some(timeout);
         say(format!(
             "baseline: tests pass in {:.1}s; a mutant gets {}s; {jobs} job(s) ({:.1}s)",
             baseline.as_secs_f64(),
@@ -581,7 +584,10 @@ fn run_tests(args: &Args) -> Result<i32> {
                 match route::trace(
                     &tests,
                     &prepared.test_binaries,
-                    &libtest,
+                    &route::BaselineRun {
+                        libtest: &libtest,
+                        took: &took_each,
+                    },
                     global,
                     jobs,
                     route::trace_budget(baseline),
@@ -626,15 +632,19 @@ fn run_tests(args: &Args) -> Result<i32> {
                 reason: Some(why),
             });
         }
+        let pool = exec::Pool {
+            jobs,
+            timeout,
+            // The first run of a routed mutant is given up sooner, and run
+            // again with `timeout`, unless the limit was given.
+            routed_floor: explicit.is_none().then_some(exec::MINIMUM_ROUTED_TIMEOUT),
+            routing: routing.as_ref(),
+        };
         let ran = exec::run_embedded(
             &tests,
             &prepared.test_binaries,
             &prepared.embedded,
-            &exec::Pool {
-                jobs,
-                timeout,
-                routing: routing.as_ref(),
-            },
+            &pool,
             &|id, ran, took| {
                 if ran == Ran::Unreached {
                     say(format!("{} ... missed ({NOT_REACHED}) in 0.0s", names[&id]));
@@ -643,18 +653,29 @@ fn run_tests(args: &Args) -> Result<i32> {
                 }
             },
             &|r| {
-                say(format!(
-                    "{} mutant(s) did not end within {}s and are run again alone",
-                    r.count,
-                    timeout.as_secs()
-                ));
+                let secs = timeout.as_secs();
+                say(if pool.routed_floor.is_some() && pool.routing.is_some() {
+                    format!(
+                        "{} mutant(s) did not end within the time given for their own tests and are run again alone, with {secs}s",
+                        r.count
+                    )
+                } else {
+                    format!(
+                        "{} mutant(s) did not end within {secs}s and are run again alone",
+                        r.count
+                    )
+                });
             },
         )?;
         results.extend(ran.into_iter().map(|(id, ran, duration)| MutantResult {
             id,
             status: status_of(ran),
             duration,
-            reason: (ran == Ran::Unreached).then(|| NOT_REACHED.to_owned()),
+            reason: match ran {
+                Ran::Unreached => Some(NOT_REACHED.to_owned()),
+                Ran::Timeout => Some(results::timeout_reason(timeout)),
+                Ran::Caught | Ran::Missed => None,
+            },
         }));
         // One at a time, each tested right after its build: the binaries of a
         // build (and the `CARGO_BIN_EXE_*` and working directory they carry)
@@ -675,7 +696,7 @@ fn run_tests(args: &Args) -> Result<i32> {
                         id,
                         status: status_of(ran),
                         duration: took,
-                        reason: None,
+                        reason: (ran == Ran::Timeout).then(|| results::timeout_reason(timeout)),
                     }
                 }
             };
@@ -690,12 +711,7 @@ fn run_tests(args: &Args) -> Result<i32> {
 
     results.sort_by_key(|r| r.id);
     let counts = Counts::of(&results);
-    let report = results::report_json(
-        &all_mutants,
-        &results,
-        limit,
-        args.shard.map(|s| (s.k, s.n)),
-    );
+    let report = results::report_json(&all_mutants, &results, args.shard.map(|s| (s.k, s.n)));
     results::write_output(out_dir, &mutants, &results, &report)?;
     if json {
         println!(

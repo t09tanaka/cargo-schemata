@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.0 - 2026-11-11
+
+- **With routing and two or more jobs, a mutant in an endless loop frees its
+  job sooner.** Every mutant had `max(20 s, 5 x the whole baseline)` in the
+  first run and again in the run alone that follows a time-out, although a
+  routed mutant runs only the tests that reach it. The first run now gets
+  `max(10 s, 5 x its tests)`, never more than the old limit. "Its tests" is the
+  sum of what each test it runs took alone during tracing, and the baseline time
+  of a binary that runs whole. A mutant that reaches it is run again alone with
+  the old limit, and only that run decides: what is reported as caught, missed
+  or `timeout` is what 0.2.0 reports. A mutant that hangs costs about 10 s plus
+  the old limit instead of twice the old limit. Nothing changes with one job,
+  `--timeout`, `--no-routing`, the mutants built on their own, or a mutant that
+  no single test reaches.
+- The note of the second run says `did not end within the time given for their
+  own tests and are run again alone, with <n>s` when the first limit was the
+  sooner one.
+- The default of `--jobs` is unchanged (a quarter of the processors, at most 4).
+  The jobs share the working directory of the package and the network, so a
+  higher default could make tests fail, and a mutant look caught, in a package
+  whose tests write files there or bind a fixed port. More jobs stay a choice.
+- A process group id of 1 or less is never signalled.
+
 ## 0.2.0 - 2026-11-10
 
 - **Breaking: a `--file` glob that matches no mutants fails the run.** A glob in
