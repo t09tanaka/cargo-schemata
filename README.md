@@ -2,7 +2,7 @@
 
 Mutation testing for Rust that builds mutants once, as schemata.
 
-**Status: 0.4.0.** Listing the mutants (`--list`), building them (`--build-only`) and running the tests on them (a plain `cargo schemata`) work, and so do `--in-diff` (only the code a diff changes) and `--shard` with `merge` (a run in several parts). Unix only: Linux and macOS (Windows is not supported). There is no `--html`, and results of an earlier run are not reused (see "Differences from cargo-mutants").
+**Status: 0.4.0.** Listing the mutants (`--list`), building them (`--build-only`) and running the tests on them (a plain `cargo schemata`) work, and so do `--in-diff` (only the code a diff changes), `--shard` with `merge` (a run in several parts) and `--trace-only` with `--reuse-trace` (the parts share one baseline and one trace). Unix only: Linux and macOS (Windows is not supported). There is no `--html`, and results of an earlier run are not reused (see "Differences from cargo-mutants").
 
 ## Goal
 
@@ -36,6 +36,8 @@ for each of them, and a mutant is caught at its first failed test (see
 cargo schemata [options] [-- <cargo test args> [-- <test binary args>]]
 cargo schemata --list [--json] [options]
 cargo schemata --build-only [--json] [options] [-- <cargo test args>]
+cargo schemata --trace-only [-o <dir>] [options] [-- <cargo test args>]
+cargo schemata --shard <k>/<n> --reuse-trace <dir>/trace.json [options] [-- <cargo test args>]
 cargo schemata merge <part.json>... [--output <dir>] [--json]
 cargo schemata --version | --help
 ```
@@ -63,6 +65,8 @@ static initializers are listed like any other code.
 | `--build-only`               | Rewrite and build the mutants once, and report how each was built (see below)            |
 | `--json`                     | Print JSON: the report of a run, or the list as `cargo mutants --list --json` does       |
 | `-j`, `--jobs <n>`           | How many test processes run at a time. Default: a quarter of the processors, at least 1 and at most 4 |
+| `--trace-only`               | Build every mutant, run the tests without a mutant and trace them, write that to `trace.json` in `-o`, and run no mutant. Not with `--shard`, `--no-routing`, `--list` or `--build-only`. See [One baseline and one trace for all parts](#one-baseline-and-one-trace-for-all-parts---trace-only-and---reuse-trace) |
+| `--reuse-trace <file>`       | Take the baseline and the trace from a file `--trace-only` wrote instead of running them. Refused, and nothing is run, unless the file was made with the same source tree, toolchain, cargo-schemata and options. Not with `--no-routing` |
 | `--no-routing`               | Run every test for every mutant, and do not end a run at the first failed test (see "Routing") |
 | `-t`, `--timeout <secs>`     | What one mutant's tests may take. Default: five times the time of the tests without a mutant, at least 20 seconds. With routing and two or more jobs, a first run is given up sooner and run again alone with this limit (see "Time limits") |
 | `-o`, `--output <dir>`       | Where `report.json` and the `*.txt` lists are written. Default: `schemata.out`           |
@@ -129,7 +133,7 @@ The file names in the diff are matched with the paths of the mutants, relative t
 - `round-robin` (the default): mutant `i` of the list goes to part `i mod n`. Mutants that are slow tend to sit together (the mutants of one file test the same slow code), and this spreads them over all the parts, so the parts take about as long. In one crate of about 1000 mutants in four parts, the slowest slice took nearly twice as long as the fastest, and the slowest part sets the time of the whole run.
 - `slice`: consecutive ranges of the list, the first `ceil(total / n)` mutants to part 0 and so on (the last parts may be empty). This is the default of cargo-mutants.
 
-The list is the one `--list` prints, in a fixed order that does not depend on the machine, the job or the number of jobs (the packages by name, then each package's files in the order the walk from its top files finds them, and the mutants of a file in source order; nothing is hashed or read from a directory listing), so for the same source tree and options every part computes the same division. Every part builds all the mutants it has to run and runs the tests without a mutant first, so a part costs a baseline and a build; what is divided is the test runs on the mutants.
+The list is the one `--list` prints, in a fixed order that does not depend on the machine, the job or the number of jobs (the packages by name, then each package's files in the order the walk from its top files finds them, and the mutants of a file in source order; nothing is hashed or read from a directory listing), so for the same source tree and options every part computes the same division. Every part builds all the mutants it has to run, runs the tests without a mutant and traces them first, so a part costs a build, a baseline and a trace; what is divided is the test runs on the mutants. The baseline and the trace can be made once for all parts, see [One baseline and one trace for all parts](#one-baseline-and-one-trace-for-all-parts---trace-only-and---reuse-trace).
 
 **The default changed in 0.4.0** (it was `slice`). Parts made by 0.3.0 and by 0.4.0 are different divisions: give every job the same version and the same `--sharding`, or pass `--sharding slice` to get the old division back. `merge` refuses parts that were made with different values.
 
@@ -200,6 +204,103 @@ jobs:
 ```
 
 A part that was killed or did not finish writes no report; `if-no-files-found: error` and `merge` (which lists the missing part) then fail the workflow.
+
+#### One baseline and one trace for all parts (`--trace-only` and `--reuse-trace`)
+
+Before it runs its mutants, every part does the same work: it builds, runs the whole test suite without a mutant (the baseline) and runs every test alone (the trace, see "Routing"). The last two do not depend on the part, so they can be done once:
+
+```bash
+cargo schemata --trace-only -o prep                                  # build, baseline, trace; no mutant is run
+cargo schemata --shard 0/3 --reuse-trace prep/trace.json -o ../parts/0
+cargo schemata --shard 1/3 --reuse-trace prep/trace.json -o ../parts/1
+cargo schemata --shard 2/3 --reuse-trace prep/trace.json -o ../parts/2
+cargo schemata merge ../parts/*/report.json -o schemata.out
+```
+
+`--trace-only` builds **all** the mutants of the run (it takes no `--shard`), runs the baseline and the trace, and writes `trace.json` into `-o`: the time of the baseline, the test binaries, the tests of each with what each took alone, which mutants each test reached, and the inputs all of that was made from. It runs no mutant and writes no report; the exit code is 0 when the file was written, and 1 when the tests fail without a mutant (as for a run). A run with `--reuse-trace <file>` prints `baseline: reused from ...` and `traced: reused: ...` instead of running the two stages.
+
+**What is reused and what is not.** The baseline and the trace are reused. The build is not: every part still rewrites and builds its own mutants (the test binaries are files of that machine, and a part builds only its own mutants), and the mutants that are built one at a time are built in the part as before.
+
+**A part that reuses a trace gives every mutant the status it gives when it traces itself.** The file holds the trace of a build with all mutants, and a part takes from it what a build of its own mutants records: the other mutants are dropped; a part whose mutants the baseline does not reach runs every test for each mutant, as it does when it finds that out itself; and a mutant that is in the build of the part but was not in the build of the trace (it did not compile there, next to a mutant of another part) was never recorded, so it gets every test rather than being called "not reached". The test binaries are matched by package, target and kind, in whatever order the builds finished them; a build with other test binaries is refused. `tests/shard_merge.rs` runs the fixture both ways and compares the reports mutant by mutant, each part and the merged run.
+
+**The time limit follows the same rule** ("Time limits"): `max(20 seconds, 5 x the baseline)`, or `--timeout`, where the baseline is the one in the file, as it was measured by `--trace-only`; so are the times of the tests alone, which order the steps of a mutant and set the limit of its first run. Run `--trace-only` on the kind of machine the parts run on: a baseline from a much faster machine makes the limit of the parts too short.
+
+**The file is only good for the inputs it was made from, and a run refuses any other file.** It does not trace again by itself and it does not go on: exit code 1, before anything is built, and no report.
+
+```
+$ cargo schemata --shard 1/3 --reuse-trace prep/trace.json -o ../parts/1
+error: --reuse-trace prep/trace.json: the file was not made for this run; nothing was run (make it again with --trace-only, with the same source tree, toolchain and options)
+  - the source tree differs: src/lib.rs (changed)
+  - --timeout differs: none in the file, 30s here
+```
+
+| Has to be the same        | What is compared                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- |
+| the source tree           | a SHA-256 of every file and symbolic link that is copied for the build: everything below the workspace root (`Cargo.lock`, manifests, `.cargo`, `build.rs`, test data and files that are not Rust included) except `.git`, `target` and the target directory. The `-o` directory of the run and the trace file itself are left out. The files that differ are named |
+| the toolchain             | `rustc -vV` (version, commit and host) and `cargo -V`, as the workspace sees them (a `rust-toolchain.toml` applies) |
+| cargo-schemata            | its version, and the version of the layout of the file                                               |
+| the build                 | the arguments for cargo after `--` (targets, features, profile) and the rustflags (`RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`) |
+| the tests                 | the arguments for the test binaries (filters, `--skip`, `--test-threads`) and `--timeout`             |
+| the mutants               | the packages (`-p`, `--workspace`, the directory) and the list of all mutants with their ids (so also `-f`, `-e`, `-F`, `-E`, `--in-diff`, `--error`, `--skip-calls` and the configuration file) |
+
+`--shard`, `--sharding`, `-j`, `-o` and `--json` may differ: one file serves every part of any division. Because every file below the root counts, a file that one run leaves in the tree makes the next run on that tree refuse the trace (`parts/0/report.json (only here)`): write the output of the parts outside the tree or below `target/`, as above, when several parts run on one checkout. In CI every job has a checkout of its own and the paths of the recipe below are fine.
+
+**What the file cannot know.** Things outside the workspace root that the build or the tests read are not compared: a path dependency outside the root, environment variables other than the rustflags, services and files of the machine. And a part no longer runs the tests without a mutant itself: if they would fail on the machine of the part for a reason that is not in the tree (a missing program, a port in use), every mutant of that part fails its tests and counts as caught. Without `--reuse-trace` such a part stops at its baseline. Give the parts the environment of the job that traced. cargo-mutants has `--baseline=skip`, which runs no baseline and trusts that the tests pass; `--reuse-trace` runs none either, but only takes a baseline that was run on exactly these inputs.
+
+In CI, one job traces and the parts wait for it:
+
+```yaml
+name: mutation
+on: pull_request
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-schemata --locked
+      - run: cargo schemata --trace-only -o prep # fails if the tests fail without a mutant
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trace
+          path: prep/trace.json
+          if-no-files-found: error
+  mutants:
+    needs: trace
+    runs-on: ubuntu-latest # the same kind of machine and the same toolchain as `trace`
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-schemata --locked
+      - uses: actions/download-artifact@v4
+        with:
+          name: trace
+          path: prep
+      - run: cargo schemata --shard ${{ matrix.shard }}/4 --reuse-trace prep/trace.json -o parts/${{ matrix.shard }}
+        continue-on-error: true # a refused trace writes no report, and the merge then fails
+      - uses: actions/upload-artifact@v4
+        with:
+          name: part-${{ matrix.shard }}
+          path: parts/${{ matrix.shard }}/report.json
+          if-no-files-found: error
+  merge:
+    needs: mutants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-schemata --locked
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: part-*
+          path: parts
+      - run: cargo schemata merge parts/*/report.json -o schemata.out
+```
+
+Use the same options in `trace` and in every part (add `--in-diff pr.diff` to both, with the same diff file at the same path). **What this saves is machine time, not waiting time**: the baseline and the trace are paid once instead of once per part, but the parts start after the `trace` job, which also builds, so the workflow ends about one build (and one job start) later than with parts that each trace themselves. With few parts or a short test suite, leave it out.
 
 ### What each mutant carries
 
@@ -285,8 +386,8 @@ cargo schemata: FAILED (17 caught, 4 missed, 1 timeout, 2 unviable in 13.1s)
 | Exit code | Meaning                                                                                  |
 | --------- | ---------------------------------------------------------------------------------------- |
 | 0         | No mutant was missed (`cargo schemata: OK (...)`)                                        |
-| 1         | A mutant was missed, a `--file` or `examine_globs` glob matches no mutants (unless `--allow-empty`), the tests fail without a mutant, something could not be built or run, or another run is at work in the package. For `merge`: a mutant was missed, or the parts are not all the parts of one run |
-| 2         | Wrong usage: an unknown option, `--jobs 0`, a `--timeout` that is not positive, a `--shard` that is not `k/n` with `k < n`, an unknown `--sharding`, `--sharding` without `--shard`, an unknown key in `.cargo/mutants.toml`, options this version does not have (`--html`) |
+| 1         | A mutant was missed, a `--file` or `examine_globs` glob matches no mutants (unless `--allow-empty`), the tests fail without a mutant, something could not be built or run, the file of `--reuse-trace` was not made for this run, or another run is at work in the package. For `merge`: a mutant was missed, or the parts are not all the parts of one run |
+| 2         | Wrong usage: an unknown option, `--jobs 0`, a `--timeout` that is not positive, a `--shard` that is not `k/n` with `k < n`, an unknown `--sharding`, `--sharding` without `--shard`, `--trace-only` with `--shard` or `--no-routing`, `--reuse-trace` with `--no-routing`, an unknown key in `.cargo/mutants.toml`, options this version does not have (`--html`) |
 | 5         | `--in-diff`: the diff is out of date with the source tree (the exit code of cargo-mutants) |
 | 6         | `--in-diff`: the diff cannot be read or parsed                                           |
 | 130 / 143 | Interrupted (SIGINT / SIGTERM). The test processes were killed first, and no report was written |
@@ -462,7 +563,8 @@ python3 scripts/gen-expected.py
 
 `--in-diff` cases use the diff files in `tests/fixtures/diffs` (`@fixtures@` in a case
 stands for their directory). `cargo test` also runs a fixture crate on all its parts and
-merges them (`tests/shard_merge.rs`), which takes a few minutes the first time.
+merges them (`tests/shard_merge.rs`), which takes a few minutes the first time; the same test
+runs the parts again with `--reuse-trace` and compares them with the parts that traced themselves.
 
 ## License
 

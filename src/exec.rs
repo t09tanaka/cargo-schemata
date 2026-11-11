@@ -482,6 +482,7 @@ mod tests {
                 env: vec![("KIT_VALUE".into(), "kept".into())],
                 package: "p".into(),
                 target: "t".into(),
+                kind: "lib".into(),
             },
             vec!["-c".into(), script.into()],
         )

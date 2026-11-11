@@ -213,7 +213,7 @@ impl Workspace {
     }
 }
 
-fn cargo_bin() -> String {
+pub fn cargo_bin() -> String {
     std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned())
 }
 

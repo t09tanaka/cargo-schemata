@@ -25,10 +25,11 @@ mod shard;
 mod span;
 mod sync;
 mod tmpdir;
+mod tracefile;
 mod visit;
 mod workspace;
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -45,6 +46,7 @@ use crate::options::{Config, Filters, Options, Usage};
 use crate::prepare::Single;
 use crate::results::{Counts, MutantResult, Status};
 use crate::shard::{Shard, Sharding};
+use crate::tracefile::{BinaryName, Identity, Inputs, Outcome, Stages, TraceFile};
 use crate::workspace::{Package, PackageFilter, Workspace};
 
 /// Mutation testing for Rust that builds mutants once, as schemata.
@@ -83,6 +85,29 @@ struct Args {
     /// soon as a test fails.
     #[arg(long, help_heading = "Execution")]
     no_routing: bool,
+
+    /// Build every mutant, run the tests without a mutant and trace which tests
+    /// reach which mutant, write that to `trace.json` in `--output`, and run no
+    /// mutant. The parts of a divided run read it with `--reuse-trace`.
+    #[arg(
+        long,
+        conflicts_with_all = ["list", "build_only", "shard", "no_routing", "reuse_trace"],
+        help_heading = "Execution"
+    )]
+    trace_only: bool,
+
+    /// Do not run the tests without a mutant and do not trace them: take both
+    /// from this file, which `--trace-only` wrote. The file is refused, and
+    /// nothing is run, unless it was made with the same source tree, toolchain,
+    /// cargo-schemata and options (everything but `--shard`, `--sharding`,
+    /// `-j` and `-o`). The mutants are still built here.
+    #[arg(
+        long,
+        value_name = "FILE",
+        conflicts_with_all = ["list", "build_only", "no_routing"],
+        help_heading = "Execution"
+    )]
+    reuse_trace: Option<Utf8PathBuf>,
 
     /// Seconds one mutant's tests may take. Default: five times the time of
     /// the tests without a mutant, at least 20. With routing and two or more
@@ -511,7 +536,12 @@ fn run_tests(args: &Args) -> Result<i32> {
     let schemata = schemata_dir(&workspace);
     let _lock = lock::Lock::acquire(&schemata)?;
     let out_dir = args.output.as_std_path();
-    results::clear_output(out_dir)?;
+    if args.trace_only {
+        // not a run: the report of the last run stays, the last trace does not
+        tracefile::clear(out_dir)?;
+    } else {
+        results::clear_output(out_dir)?;
+    }
     if let Some(lines) = empty_glob_failure(&empty_globs, args.allow_empty) {
         // the report of an earlier run (cleared above) must not be taken for this one
         for line in lines {
@@ -519,6 +549,31 @@ fn run_tests(args: &Args) -> Result<i32> {
         }
         return Ok(1);
     }
+    let split = split_test_args(&args.test_args);
+    // What the baseline and the trace depend on, taken before anything is built.
+    let identity = if args.trace_only || args.reuse_trace.is_some() {
+        let mut exclude = vec![
+            workspace.target_dir().as_std_path().to_owned(),
+            out_dir.to_owned(),
+        ];
+        exclude.extend(args.reuse_trace.iter().map(|p| p.as_std_path().to_owned()));
+        Some(Identity::of(&Inputs {
+            root: workspace.root().as_std_path(),
+            exclude: &exclude,
+            packages: packages.iter().map(|p| p.name.clone()).collect(),
+            mutants: &all_mutants,
+            cargo_args: &split.build,
+            test_args: &split.binary,
+            timeout: args.timeout.map(Duration::from_secs_f64),
+        })?)
+    } else {
+        None
+    };
+    // Refused here, before the build, when it was made for other inputs.
+    let mut reused = match (&args.reuse_trace, &identity) {
+        (Some(path), Some(identity)) => Some(TraceFile::read_for(path.as_std_path(), identity)?),
+        _ => None,
+    };
     // Versions before 0.2.0 kept the temporary directories in the target
     // directory; clear what they left.
     tmpdir::force_remove_dir_all(&schemata.join("tmp"))
@@ -532,6 +587,18 @@ fn run_tests(args: &Args) -> Result<i32> {
     let mut results: Vec<MutantResult> = Vec::new();
 
     if mutants.is_empty() {
+        if let (true, Some(identity)) = (args.trace_only, identity) {
+            let file = TraceFile {
+                identity,
+                stages: None,
+            };
+            let path = file.write(out_dir)?;
+            say(format!(
+                "cargo schemata: OK (no mutants to trace; {})",
+                path.display()
+            ));
+            return Ok(0);
+        }
         say("no mutants to run".to_owned());
     } else {
         let t = Instant::now();
@@ -549,88 +616,143 @@ fn run_tests(args: &Args) -> Result<i32> {
                 "the build produced no test binaries; is `-- <cargo args>` selecting some?"
             );
         }
-        let bin_args = split_test_args(&args.test_args).binary;
+        let bin_args = split.binary;
         let route_ok = !args.no_routing;
         let tests = Tests {
             bin_args: &bin_args,
             tmp_root: &tmp_root,
             early_kill: route_ok && !route::changes_output(&bin_args),
         };
-        let trace_file = tmp_root.join("trace-baseline.txt");
-        let t = Instant::now();
-        let (baseline, took_each, libtest) = match tests.baseline(
-            &prepared.test_binaries,
-            explicit,
-            route_ok.then_some(trace_file.as_path()),
-        )? {
-            Baseline::Passed {
-                took,
-                took_each,
-                libtest,
-            } => (took, took_each, libtest),
-            Baseline::Failed { binary, log_tail } => {
-                eprintln!("{log_tail}");
-                eprintln!(
-                    "cargo schemata: FAILED (the tests of {binary} fail without any mutant; nothing was run)"
-                );
-                return Ok(1);
-            }
-            Baseline::TimedOut(binary) => {
-                eprintln!(
-                    "cargo schemata: FAILED (the tests of {binary} did not end within --timeout without any mutant; nothing was run)"
-                );
-                return Ok(1);
-            }
-        };
         let jobs = args.jobs.map_or_else(exec::default_jobs, |j| j as usize);
-        let timeout = exec::mutant_timeout(baseline, explicit);
-        say(format!(
-            "baseline: tests pass in {:.1}s; a mutant gets {}s; {jobs} job(s) ({:.1}s)",
-            baseline.as_secs_f64(),
-            timeout.as_secs(),
-            t.elapsed().as_secs_f64()
-        ));
-        let routing = if route_ok && libtest.iter().any(|&l| l) {
+        let embedded: BTreeSet<usize> = prepared.embedded.iter().copied().collect();
+        // The baseline, and the routing (`None`: every test for each mutant).
+        let (baseline, routing) = if let (Some(file), Some(path)) =
+            (reused.take(), &args.reuse_trace)
+        {
+            let Some(stages) = file.stages else {
+                anyhow::bail!(
+                    "--reuse-trace {path}: the file was made for a run without mutants; nothing was run"
+                );
+            };
+            let (baseline, routing) = stages
+                .for_build(&prepared.test_binaries, &embedded)
+                .with_context(|| format!("--reuse-trace {path}: nothing was run"))?;
+            say(format!(
+                "baseline: reused from {path}: tests passed in {:.1}s; a mutant gets {}s; {jobs} job(s)",
+                baseline.as_secs_f64(),
+                exec::mutant_timeout(baseline, explicit).as_secs(),
+            ));
+            say(match &routing {
+                Some(r) => {
+                    let (alone, whole) = r.summary();
+                    format!("traced: reused: {alone} tests run alone, {whole} binar(ies) run whole")
+                }
+                None => "routing off: the reused trace has no routing for the mutants of this build; running every test for each mutant".to_owned(),
+            });
+            (baseline, routing)
+        } else {
+            let trace_file = tmp_root.join("trace-baseline.txt");
             let t = Instant::now();
-            let global = route::read_trace(&trace_file);
-            if global.is_empty() {
-                say("routing off: the tests of the baseline reached no mutant, so nothing was recorded"
-                    .to_owned());
+            let (baseline, took_each, libtest) = match tests.baseline(
+                &prepared.test_binaries,
+                explicit,
+                route_ok.then_some(trace_file.as_path()),
+            )? {
+                Baseline::Passed {
+                    took,
+                    took_each,
+                    libtest,
+                } => (took, took_each, libtest),
+                Baseline::Failed { binary, log_tail } => {
+                    eprintln!("{log_tail}");
+                    eprintln!(
+                        "cargo schemata: FAILED (the tests of {binary} fail without any mutant; nothing was run)"
+                    );
+                    return Ok(1);
+                }
+                Baseline::TimedOut(binary) => {
+                    eprintln!(
+                        "cargo schemata: FAILED (the tests of {binary} did not end within --timeout without any mutant; nothing was run)"
+                    );
+                    return Ok(1);
+                }
+            };
+            let timeout = exec::mutant_timeout(baseline, explicit);
+            say(format!(
+                "baseline: tests pass in {:.1}s; a mutant gets {}s; {jobs} job(s) ({:.1}s)",
+                baseline.as_secs_f64(),
+                timeout.as_secs(),
+                t.elapsed().as_secs_f64()
+            ));
+            // How the trace ended; `None` with --no-routing.
+            let outcome = if !route_ok {
                 None
+            } else if !libtest.iter().any(|&l| l) {
+                Some(Outcome::NoLibtest)
             } else {
-                match route::trace(
-                    &tests,
-                    &prepared.test_binaries,
-                    &route::BaselineRun {
-                        libtest: &libtest,
-                        took: &took_each,
-                    },
-                    global,
-                    jobs,
-                    route::trace_budget(baseline),
-                    timeout,
-                )? {
-                    route::TraceResult::Routing(tr) => {
-                        say(format!(
-                            "traced: {} tests run alone, {} binar(ies) run whole ({:.1}s)",
-                            tr.tests,
-                            tr.whole_binaries,
-                            t.elapsed().as_secs_f64()
-                        ));
-                        Some(tr.routing)
-                    }
-                    route::TraceResult::GaveUp(took) => {
-                        eprintln!(
-                            "cargo schemata: tracing the tests one by one took more than {:.0}s; running every test for each mutant",
-                            took.as_secs_f64()
-                        );
-                        None
+                let t = Instant::now();
+                let global = route::read_trace(&trace_file);
+                if global.is_empty() {
+                    say("routing off: the tests of the baseline reached no mutant, so nothing was recorded"
+                        .to_owned());
+                    Some(Outcome::NothingRecorded)
+                } else {
+                    match route::trace(
+                        &tests,
+                        &prepared.test_binaries,
+                        &route::BaselineRun {
+                            libtest: &libtest,
+                            took: &took_each,
+                        },
+                        global,
+                        jobs,
+                        route::trace_budget(baseline),
+                        timeout,
+                    )? {
+                        route::TraceResult::Routing(routing) => {
+                            let (alone, whole) = routing.summary();
+                            say(format!(
+                                "traced: {alone} tests run alone, {whole} binar(ies) run whole ({:.1}s)",
+                                t.elapsed().as_secs_f64()
+                            ));
+                            Some(Outcome::Routed(routing))
+                        }
+                        route::TraceResult::GaveUp(took) => {
+                            eprintln!(
+                                "cargo schemata: tracing the tests one by one took more than {:.0}s; running every test for each mutant",
+                                took.as_secs_f64()
+                            );
+                            Some(Outcome::GaveUp)
+                        }
                     }
                 }
+            };
+            if let (true, Some(identity), Some(trace)) = (args.trace_only, identity, &outcome) {
+                let file = TraceFile {
+                    identity,
+                    stages: Some(Stages {
+                        binaries: prepared.test_binaries.iter().map(BinaryName::of).collect(),
+                        baseline,
+                        embedded,
+                        trace: trace.clone(),
+                    }),
+                };
+                let path = file.write(out_dir)?;
+                say(format!(
+                    "cargo schemata: OK (the baseline and the trace of {} mutants are in {}; no mutant was run, in {:.1}s)",
+                    all_mutants.len(),
+                    path.display(),
+                    started.elapsed().as_secs_f64()
+                ));
+                return Ok(0);
             }
-        } else {
-            None
+            let routing = match outcome {
+                Some(Outcome::Routed(routing)) => Some(routing),
+                _ => None,
+            };
+            (baseline, routing)
         };
+        let timeout = exec::mutant_timeout(baseline, explicit);
         let t_mutants = Instant::now();
 
         let line = |id: usize, word: &str, took: Duration| {

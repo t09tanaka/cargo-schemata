@@ -75,6 +75,10 @@ pub struct TestBinary {
     pub env: Vec<(String, String)>,
     pub package: String,
     pub target: String,
+    /// The kinds of the target (`lib`, `bin`, `test`): with the package and the
+    /// name it says which binary this is, on any machine. Not in the JSON.
+    #[serde(skip)]
+    pub kind: String,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -173,7 +177,7 @@ impl Cargo {
 /// `--cap-lints=warn` added to whatever rustflags are set, so that the lints
 /// the generated code trips (unreachable code, unused parentheses) and
 /// `#![deny(warnings)]` do not stop the build.
-fn encoded_rustflags() -> String {
+pub fn encoded_rustflags() -> String {
     let cap = "--cap-lints=warn";
     if let Ok(encoded) = std::env::var("CARGO_ENCODED_RUSTFLAGS") {
         if encoded.is_empty() {
@@ -839,6 +843,13 @@ fn binaries(
             env,
             package: pkg.name.to_string(),
             target: a.target.name.clone(),
+            kind: a
+                .target
+                .kind
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(","),
         });
     }
     Ok(out)

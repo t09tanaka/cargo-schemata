@@ -21,6 +21,19 @@ pub fn sync_tree(src: &Path, dst: &Path, exclude: &[PathBuf], overrides: &Overri
     sync_dir(src, dst, Path::new(""), exclude, overrides)
 }
 
+/// Whether an entry of the tree is not copied: `.git` and `target` at the
+/// root (`rel_dir` is the directory of the entry, relative to the root), and
+/// the `exclude` paths. What `--trace-only` digests follows the same rule.
+pub fn left_out(
+    rel_dir: &Path,
+    name: &std::ffi::OsStr,
+    src_path: &Path,
+    exclude: &[PathBuf],
+) -> bool {
+    rel_dir.as_os_str().is_empty() && (name == ".git" || name == "target")
+        || exclude.iter().any(|e| e == src_path)
+}
+
 fn sync_dir(
     src_root: &Path,
     dst_root: &Path,
@@ -36,10 +49,7 @@ fn sync_dir(
         let name = entry.file_name();
         let rel_path = rel.join(&name);
         let src_path = entry.path();
-        if rel.as_os_str().is_empty() && (name == ".git" || name == "target") {
-            continue;
-        }
-        if exclude.iter().any(|e| e == &src_path) {
+        if left_out(rel, &name, &src_path, exclude) {
             continue;
         }
         let meta = fs::symlink_metadata(&src_path)?;

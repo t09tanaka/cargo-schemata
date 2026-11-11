@@ -12,13 +12,14 @@
 //! so is a binary when most of its tests reach the mutant, or when the list of
 //! names would be too long; tracing is given up when it takes too long.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
+use serde::{Deserialize, Serialize};
 
 use crate::exec::{Step, Tests};
 use crate::prepare::TestBinary;
@@ -102,7 +103,7 @@ pub fn parse_list(stdout: &str) -> Vec<String> {
         .collect()
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct BinRoute {
     /// Its tests were run alone and all passed; otherwise it always runs whole.
     traced: bool,
@@ -121,18 +122,135 @@ pub enum Plan {
     Steps(Vec<Step>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Routing {
     bins: Vec<BinRoute>,
     /// Arguments kept for every run of a listed test (not the selectors).
     rest: Vec<String>,
     /// Ids the whole baseline reached.
-    global: HashSet<usize>,
+    global: BTreeSet<usize>,
     /// For each mutant, per binary, the indices of the tests that reached it alone.
-    reach: HashMap<usize, Vec<Vec<usize>>>,
+    reach: BTreeMap<usize, Vec<Vec<usize>>>,
 }
 
 impl Routing {
+    /// How many tests were run alone, and how many binaries always run whole.
+    pub fn summary(&self) -> (usize, usize) {
+        let alone = self.bins.iter().filter(|b| b.traced);
+        (
+            alone.map(|b| b.tests.len()).sum(),
+            self.bins.iter().filter(|b| !b.traced).count(),
+        )
+    }
+
+    /// Whether a routing that was read from a file fits `nbins` test binaries:
+    /// every index it holds has to exist, so that a plan cannot be made from
+    /// what is not there.
+    pub fn check(&self, nbins: usize) -> Result<()> {
+        ensure!(
+            self.bins.len() == nbins,
+            "it has {} test binaries, not {nbins}",
+            self.bins.len()
+        );
+        for b in &self.bins {
+            ensure!(
+                b.times.len() == b.tests.len(),
+                "a binary has {} tests and {} times",
+                b.tests.len(),
+                b.times.len()
+            );
+        }
+        for (id, hits) in &self.reach {
+            ensure!(
+                hits.len() == nbins,
+                "mutant {id} has {} binaries, not {nbins}",
+                hits.len()
+            );
+            for (b, tests) in hits.iter().enumerate() {
+                ensure!(
+                    tests.iter().all(|&t| t < self.bins[b].tests.len()),
+                    "mutant {id} names a test that binary {b} does not have"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Make a routing that was traced on a build of `traced` (every mutant of
+    /// the run) the routing a build of `here` (the mutants of one part) would
+    /// have traced itself, or `None` when that part would have had no routing.
+    ///
+    /// A build records only its own mutants, so the others are dropped. When
+    /// the baseline then reached none of them, a part that traced itself
+    /// turns routing off and runs every test; so does this. A mutant that is
+    /// in this build and was not in the traced one (it did not compile there,
+    /// or was built on its own) was never recorded: it is not "unreached", it
+    /// gets every test.
+    pub fn for_build(mut self, here: &BTreeSet<usize>, traced: &BTreeSet<usize>) -> Option<Self> {
+        self.global.retain(|id| here.contains(id));
+        self.reach.retain(|id, _| here.contains(id));
+        if self.global.is_empty() {
+            return None;
+        }
+        for id in here.difference(traced) {
+            self.global.insert(*id);
+            self.reach.remove(id);
+        }
+        Some(self)
+    }
+
+    /// The same routing for the binaries in another order: binary `b` of this
+    /// routing is binary `to[b]` of the result. `to` is a permutation.
+    pub fn reordered(self, to: &[usize]) -> Self {
+        let place = |old: Vec<Vec<usize>>| {
+            let mut new = vec![Vec::new(); old.len()];
+            for (b, tests) in old.into_iter().enumerate() {
+                new[to[b]] = tests;
+            }
+            new
+        };
+        let mut bins: Vec<Option<BinRoute>> = self.bins.iter().map(|_| None).collect();
+        for (b, route) in self.bins.into_iter().enumerate() {
+            bins[to[b]] = Some(route);
+        }
+        Routing {
+            bins: bins
+                .into_iter()
+                .map(|b| b.expect("a permutation"))
+                .collect(),
+            rest: self.rest,
+            global: self.global,
+            reach: self
+                .reach
+                .into_iter()
+                .map(|(id, h)| (id, place(h)))
+                .collect(),
+        }
+    }
+
+    /// A routing of `nbins` binaries that differ from each other, for tests.
+    #[cfg(test)]
+    pub fn sample(nbins: usize) -> Routing {
+        Routing {
+            bins: (0..nbins)
+                .map(|b| BinRoute {
+                    traced: b != 1,
+                    tests: (0..10).map(|t| format!("b{b}::t{t}")).collect(),
+                    times: (0..10)
+                        .map(|t| Duration::from_millis(10 * (b as u64 + 1) + t))
+                        .collect(),
+                    whole: Duration::from_secs(b as u64 + 1),
+                })
+                .collect(),
+            rest: vec!["--test-threads".to_owned(), "1".to_owned()],
+            global: [1, 2, 3].into(),
+            reach: BTreeMap::from([
+                (1, (0..nbins).map(|b| vec![b, b + 1]).collect()),
+                (2, (0..nbins).map(|b| vec![9 - b]).collect()),
+            ]),
+        }
+    }
+
     #[cfg(test)]
     fn plan(&self, id: usize, nbins: usize) -> Plan {
         self.plan_and_estimate(id, nbins).0
@@ -203,7 +321,7 @@ impl Routing {
 }
 
 /// Read the ids in a trace file.
-pub fn read_trace(path: &Path) -> HashSet<usize> {
+pub fn read_trace(path: &Path) -> BTreeSet<usize> {
     std::fs::read_to_string(path)
         .unwrap_or_default()
         .lines()
@@ -211,14 +329,8 @@ pub fn read_trace(path: &Path) -> HashSet<usize> {
         .collect()
 }
 
-pub struct Traced {
-    pub routing: Routing,
-    pub tests: usize,
-    pub whole_binaries: usize,
-}
-
 pub enum TraceResult {
-    Routing(Traced),
+    Routing(Routing),
     /// It took longer than the budget; the elapsed time.
     GaveUp(Duration),
 }
@@ -242,7 +354,7 @@ pub fn trace(
     tests: &Tests,
     bins: &[TestBinary],
     baseline: &BaselineRun,
-    global: HashSet<usize>,
+    global: BTreeSet<usize>,
     jobs: usize,
     budget: Duration,
     timeout: Duration,
@@ -352,8 +464,7 @@ pub fn trace(
     for (&(b, t), took) in work.iter().zip(&micros) {
         routes[b].times[t] = Duration::from_micros(took.load(Ordering::Relaxed));
     }
-    let mut reach: HashMap<usize, Vec<Vec<usize>>> = HashMap::new();
-    let mut count = 0;
+    let mut reach: BTreeMap<usize, Vec<Vec<usize>>> = BTreeMap::new();
     for (b, route) in routes.iter_mut().enumerate() {
         if broken[b].load(Ordering::Relaxed) {
             route.traced = false;
@@ -361,7 +472,6 @@ pub fn trace(
         if !route.traced {
             continue;
         }
-        count += route.tests.len();
         for t in 0..route.tests.len() {
             for id in read_trace(&file(b, t)) {
                 reach
@@ -371,16 +481,11 @@ pub fn trace(
             }
         }
     }
-    let whole_binaries = routes.iter().filter(|r| !r.traced).count();
-    Ok(TraceResult::Routing(Traced {
-        routing: Routing {
-            bins: routes,
-            rest: split.rest,
-            global,
-            reach,
-        },
-        tests: count,
-        whole_binaries,
+    Ok(TraceResult::Routing(Routing {
+        bins: routes,
+        rest: split.rest,
+        global,
+        reach,
     }))
 }
 
@@ -459,7 +564,7 @@ mod tests {
             }],
             rest: v(&["--test-threads", "2"]),
             global: [1, 2, 3].into(),
-            reach: HashMap::from([(1, vec![vec![0, 1]]), (2, vec![vec![]])]),
+            reach: BTreeMap::from([(1, vec![vec![0, 1]]), (2, vec![vec![]])]),
         }
     }
 
@@ -592,6 +697,7 @@ mod tests {
             env: Vec::new(),
             package: "p".into(),
             target: "t".into(),
+            kind: "lib".into(),
         };
         let bin_args = v(&["-c", script]);
         let tests = Tests {
@@ -665,7 +771,7 @@ mod tests {
             times: Vec::new(),
             whole: Duration::from_secs(2),
         });
-        r.reach = HashMap::from([(1, vec![vec![2], vec![]])]);
+        r.reach = BTreeMap::from([(1, vec![vec![2], vec![]])]);
         let (plan, estimate) = r.plan_and_estimate(1, 2);
         // t2 alone (300 ms) and the second binary whole (2 s)
         assert_eq!(estimate, Some(Duration::from_millis(2300)));
@@ -700,7 +806,7 @@ mod tests {
             ],
             rest: v(&["--test-threads", "2"]),
             global: [1, 2].into(),
-            reach: HashMap::from([(
+            reach: BTreeMap::from([(
                 1,
                 vec![vec![0, 4], vec![], vec![], vec![0, 1, 4], vec![0, 1]],
             )]),
@@ -737,5 +843,118 @@ mod tests {
             Plan::Steps(vec![whole(2), whole(3), whole(1), whole(4), whole(0)])
         );
         assert_eq!(estimate, None);
+    }
+
+    #[test]
+    fn a_routing_read_back_from_json_is_the_same_routing() {
+        let mut r = routing(true, 10);
+        r.bins[0].times[3] = Duration::new(2, 123_456_789);
+        let text = serde_json::to_string(&r).unwrap();
+        let back: Routing = serde_json::from_str(&text).unwrap();
+        assert_eq!(back, r);
+        // the same text again: nothing in it depends on the order of a hash
+        assert_eq!(serde_json::to_string(&back).unwrap(), text);
+        for id in 0..5 {
+            assert_eq!(back.plan_and_estimate(id, 1), r.plan_and_estimate(id, 1));
+        }
+    }
+
+    #[test]
+    fn a_routing_for_a_part_is_what_the_part_would_have_traced() {
+        // traced on a build of 1, 2 and 3; the baseline reached all three
+        let traced: BTreeSet<usize> = [1, 2, 3].into();
+        // a part with 1 and 3: mutant 2 is dropped, the plans of 1 and 3 stay
+        let whole = routing(true, 10);
+        let part = routing(true, 10)
+            .for_build(&[1, 3].into(), &traced)
+            .unwrap();
+        assert_eq!(part.global, [1, 3].into());
+        assert_eq!(part.reach.keys().copied().collect::<Vec<_>>(), vec![1]);
+        for id in [1, 3] {
+            assert_eq!(
+                part.plan_and_estimate(id, 1),
+                whole.plan_and_estimate(id, 1)
+            );
+        }
+        // the mutants of another part are not planned here
+        assert_eq!(part.plan(2, 1), Plan::Unreached);
+
+        // a part none of whose mutants the baseline reached has no routing,
+        // as when it traces itself ("the baseline reached no mutant")
+        assert_eq!(routing(true, 10).for_build(&[7, 8].into(), &traced), None);
+        let all: BTreeSet<usize> = [1, 2, 3, 7, 8].into();
+        assert_eq!(routing(true, 10).for_build(&[7, 8].into(), &all), None);
+
+        // 9 is built here but was not in the traced build: never recorded, so
+        // it is not unreached. It gets every test.
+        let part = routing(true, 10)
+            .for_build(&[1, 9].into(), &traced)
+            .unwrap();
+        assert_eq!(
+            part.plan_and_estimate(9, 1),
+            (Plan::Steps(vec![Step { bin: 0, args: None }]), None)
+        );
+        // while 7, which was in the traced build and was not reached, is unreached
+        let part = routing(true, 10).for_build(&[1, 7].into(), &all).unwrap();
+        assert_eq!(part.plan(7, 1), Plan::Unreached);
+    }
+
+    #[test]
+    fn a_routing_follows_the_binaries_to_another_order() {
+        let r = Routing::sample(3);
+        // binary 0 is now the last one, 1 the first, 2 the second
+        let moved = r.clone().reordered(&[2, 0, 1]);
+        assert!(moved.check(3).is_ok());
+        assert_eq!(moved.bins[2], r.bins[0]);
+        assert_eq!(moved.bins[0], r.bins[1]);
+        assert_eq!(moved.bins[1], r.bins[2]);
+        for id in [1, 2] {
+            assert_eq!(moved.reach[&id][2], r.reach[&id][0]);
+            assert_eq!(moved.reach[&id][0], r.reach[&id][1]);
+            assert_eq!(moved.reach[&id][1], r.reach[&id][2]);
+        }
+        // the same steps, with the binaries under their new numbers
+        let renumber = |plan: Plan| match plan {
+            Plan::Steps(steps) => Plan::Steps(
+                steps
+                    .into_iter()
+                    .map(|s| Step {
+                        bin: [2, 0, 1][s.bin],
+                        args: s.args,
+                    })
+                    .collect(),
+            ),
+            Plan::Unreached => Plan::Unreached,
+        };
+        for id in 0..5 {
+            let (plan, estimate) = r.plan_and_estimate(id, 3);
+            let (moved_plan, moved_estimate) = moved.plan_and_estimate(id, 3);
+            assert_eq!(moved_estimate, estimate, "{id}");
+            // the order of steps that took the same may follow the binaries
+            let sorted = |p: Plan| match p {
+                Plan::Steps(mut s) => {
+                    s.sort_by_key(|s| s.bin);
+                    Plan::Steps(s)
+                }
+                Plan::Unreached => Plan::Unreached,
+            };
+            assert_eq!(sorted(moved_plan), sorted(renumber(plan)), "{id}");
+        }
+        assert_eq!(moved.reordered(&[1, 2, 0]), r);
+    }
+
+    #[test]
+    fn a_routing_that_does_not_fit_the_binaries_is_refused() {
+        assert!(routing(true, 10).check(1).is_ok());
+        assert!(routing(true, 10).check(2).is_err());
+        let mut r = routing(true, 10);
+        r.reach.insert(3, vec![vec![10]]);
+        assert!(r.check(1).is_err());
+        let mut r = routing(true, 10);
+        r.reach.insert(3, vec![vec![], vec![]]);
+        assert!(r.check(1).is_err());
+        let mut r = routing(true, 10);
+        r.bins[0].times.pop();
+        assert!(r.check(1).is_err());
     }
 }

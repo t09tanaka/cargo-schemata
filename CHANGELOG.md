@@ -2,6 +2,26 @@
 
 ## 0.4.0 - 2026-11-11
 
+- **`--trace-only` and `--reuse-trace <file>`: the parts of a divided run share
+  one baseline and one trace.** Every `--shard` part used to run the whole test
+  suite without a mutant and then every test alone before its first mutant, the
+  same work in each part. `cargo schemata --trace-only -o prep` builds all the
+  mutants, runs the two stages once and writes `prep/trace.json` (it runs no
+  mutant and writes no report); `--shard k/n --reuse-trace prep/trace.json`
+  reads it instead of running them. The build stays in every part. The file
+  carries what it was made from: a SHA-256 of every file of the tree that is
+  copied for the build (`Cargo.lock` included), `rustc -vV` and `cargo -V`, the
+  version of cargo-schemata, the arguments after `--`, the rustflags,
+  `--timeout`, the packages and the list of the mutants. A run whose inputs
+  differ in any of these is refused with exit code 1 before it builds, naming
+  what differs (and which files); it neither traces again nor goes on. A part
+  that reuses a trace gives each mutant the status it gives when it traces
+  itself (the tests compare both on the fixture, part by part and merged), and
+  the time limit is made from the baseline in the file by the same rule. It
+  saves machine time, not waiting time: the parts start after the job that
+  traces. See "One baseline and one trace for all parts" in the README for the
+  CI recipe and for what the file cannot know (a part no longer finds out by
+  itself that the tests fail on its machine).
 - **A routed mutant starts its quickest test binary first.** A mutant that is
   reached by tests of several binaries ran them in the order cargo built them,
   so a mutant that a unit test catches in milliseconds could first wait for a

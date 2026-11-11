@@ -47,6 +47,12 @@ impl Kit {
 
     /// Run with the output in `<base>/<out>`; the exit code and the stderr.
     fn run(&self, out: &str, args: &[&str]) -> (i32, String) {
+        let (code, _, stderr) = self.run_all(out, args);
+        (code, stderr)
+    }
+
+    /// The same, with the stdout as well. An absolute `out` is used as it is.
+    fn run_all(&self, out: &str, args: &[&str]) -> (i32, String, String) {
         let o = Command::new(env!("CARGO_BIN_EXE_cargo-schemata"))
             .args(["schemata", "-d"])
             .arg(&self.dir)
@@ -60,6 +66,7 @@ impl Kit {
             .unwrap();
         (
             o.status.code().unwrap(),
+            String::from_utf8_lossy(&o.stdout).into_owned(),
             String::from_utf8_lossy(&o.stderr).into_owned(),
         )
     }
@@ -209,6 +216,96 @@ fn all_parts_merged_are_the_whole_run() {
     // --json prints the report
     let (_, stdout, _) = kit.merge("merged2", &parts, &["--json"]);
     assert_eq!(serde_json::from_str::<Value>(&stdout).unwrap(), merged);
+
+    // The same parts once more, with the baseline and the trace made once
+    // (`--trace-only`) and read by every part (`--reuse-trace`). The file and
+    // the output of a part are inside the tree, as in a CI job.
+    let prep = kit.dir.join("prep");
+    let trace = prep.join("trace.json");
+    let trace_arg = trace.to_str().unwrap();
+    let (code, out, err) = kit.run_all(prep.to_str().unwrap(), &["--trace-only"]);
+    assert_eq!(code, 0, "{out}{err}");
+    assert!(out.contains("baseline: tests pass in"), "{out}");
+    assert!(out.contains("traced: "), "{out}");
+    assert!(out.contains("no mutant was run"), "{out}");
+    // no mutant was run, and there is no report
+    assert!(!out.contains(" ... "), "{out}");
+    assert!(trace.is_file());
+    assert!(!prep.join("report.json").exists());
+
+    let mut reused_parts: Vec<PathBuf> = Vec::new();
+    for k in 0..n {
+        let shard = format!("{k}/{n}");
+        // part 0 writes into the tree, the others next to it
+        let out_dir = if k == 0 {
+            kit.dir.join("parts/0")
+        } else {
+            kit.out(&format!("reused{k}"))
+        };
+        let (code, out, err) = kit.run_all(
+            out_dir.to_str().unwrap(),
+            &["--shard", &shard, "--reuse-trace", trace_arg],
+        );
+        assert!(code <= 1, "{shard}: {out}{err}");
+        // neither stage was run here: both lines say where they come from
+        assert!(out.contains("baseline: reused from "), "{shard}: {out}");
+        assert!(!out.contains("baseline: tests pass"), "{shard}: {out}");
+        let traced: Vec<&str> = out.lines().filter(|l| l.starts_with("traced:")).collect();
+        assert_eq!(traced.len(), 1, "{shard}: {out}");
+        assert!(traced[0].starts_with("traced: reused: "), "{shard}: {out}");
+        // while the build was
+        assert!(out.contains("built: "), "{shard}: {out}");
+        // the part is what the part that traced itself was, mutant by mutant
+        assert_eq!(
+            without_durations(
+                &serde_json::from_slice(&std::fs::read(out_dir.join("report.json")).unwrap())
+                    .unwrap()
+            ),
+            without_durations(&kit.report(&format!("part{k}"))),
+            "{shard}"
+        );
+        reused_parts.push(out_dir.join("report.json"));
+
+        if k == 0 {
+            // The report of part 0 is now a file of the tree that the trace
+            // was not made for: the next part on this tree is refused, before
+            // it builds, and writes nothing.
+            let (code, out, err) =
+                kit.run_all("refused", &["--shard", "1/3", "--reuse-trace", trace_arg]);
+            assert_eq!(code, 1, "{out}{err}");
+            assert!(err.contains("nothing was run"), "{err}");
+            assert!(err.contains("parts/0/report.json (only here)"), "{err}");
+            assert!(!out.contains("built: "), "{out}");
+            assert!(!kit.out("refused").join("report.json").exists());
+            // out of the tree with it
+            std::fs::rename(kit.dir.join("parts"), kit.out("parts")).unwrap();
+            reused_parts[0] = kit.out("parts").join("0/report.json");
+        }
+    }
+    let (code, _, stderr) = kit.merge("merged_reused", &reused_parts, &[]);
+    assert_eq!(code, 1, "{stderr}");
+    let merged_reused = kit.report("merged_reused");
+    assert_eq!(without_durations(&merged_reused), without_durations(&whole));
+    assert_eq!(
+        without_durations(&merged_reused),
+        without_durations(&merged)
+    );
+    assert_eq!(statuses(&merged_reused), statuses(&whole));
+    for f in LISTS {
+        assert_eq!(kit.list("merged_reused", f), kit.list("whole", f), "{f}");
+    }
+
+    // A source file changes after the trace was made (a comment: the mutants
+    // are the same): the file is refused, nothing is built or run.
+    let lib = kit.dir.join("src/lib.rs");
+    let text = std::fs::read_to_string(&lib).unwrap();
+    std::fs::write(&lib, text + "\n// changed after the trace\n").unwrap();
+    let (code, out, err) = kit.run_all("changed", &["--reuse-trace", trace_arg]);
+    assert_eq!(code, 1, "{out}{err}");
+    assert!(err.contains("the file was not made for this run"), "{err}");
+    assert!(err.contains("src/lib.rs (changed)"), "{err}");
+    assert!(!out.contains("built: "), "{out}");
+    assert!(!kit.out("changed").join("report.json").exists());
 }
 
 /// The ids of the mutants a part evaluated.

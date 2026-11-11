@@ -412,6 +412,14 @@ fn wrong_usage_exits_with_two() {
         &["--timeout", "0"],
         &["--shard=3/3"],
         &["--list", "-j", "2"],
+        &["--trace-only", "--shard", "0/2"],
+        &["--trace-only", "--no-routing"],
+        &["--trace-only", "--list"],
+        &["--trace-only", "--build-only"],
+        &["--trace-only", "--reuse-trace", "trace.json"],
+        &["--reuse-trace", "trace.json", "--no-routing"],
+        &["--reuse-trace", "trace.json", "--list"],
+        &["--reuse-trace"],
     ] {
         let out = Command::new(env!("CARGO_BIN_EXE_cargo-schemata"))
             .arg("schemata")
