@@ -15,8 +15,9 @@
   missed mutant still runs all of its tests.
 - A binary that does not end within the limit does not hide a failure in a
   binary that used to run before it: the binaries that come before it in cargo's
-  order and have not run yet are run then (with the limit anew), and the mutant
-  is caught if one of them fails, a `timeout` otherwise. One result can differ
+  order and have not run yet are run then, and that binary once more when
+  others ran before it (with the limit anew), and the mutant is caught if one
+  of them fails, a `timeout` otherwise. One result can differ
   from 0.3.0: a mutant whose quicker binary fails is now caught where a slower
   binary that came first and hangs made it a `timeout` (see "Where the result
   can differ" in the README).

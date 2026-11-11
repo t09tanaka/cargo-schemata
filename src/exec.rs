@@ -143,8 +143,10 @@ impl Tests<'_> {
     /// binary. When one of them does not end within the limit, a binary that
     /// comes before it in the order of the binaries may not have run yet; in
     /// that order it would have run first and could have caught the mutant.
-    /// With `decides` (the result of this run is final) those steps are run
-    /// then, with the limit anew: caught if one fails, a time-out otherwise.
+    /// And the step itself, when it was not the first, had only what the steps
+    /// before it left of the limit. With `decides` (the result of this run is
+    /// final) those steps, and then that step, are run with the limit anew:
+    /// caught if one fails, a time-out otherwise.
     pub fn run_steps(
         &self,
         bins: &[TestBinary],
@@ -164,6 +166,9 @@ impl Tests<'_> {
                     let mut earlier: Vec<&Step> =
                         steps[n + 1..].iter().filter(|s| s.bin < step.bin).collect();
                     earlier.sort_by_key(|s| s.bin);
+                    if n > 0 {
+                        earlier.push(step);
+                    }
                     let again = Instant::now();
                     for step in earlier {
                         let left = timeout.map(|t| t.saturating_sub(again.elapsed()));
@@ -792,7 +797,9 @@ mod tests {
         let s = Scratch::new("fallback");
         let args = vec![
             "-c".to_string(),
-            "touch ran-$ROLE; case $ROLE in fail*) exit 1;; hang*) sleep 30;; esac".to_string(),
+            "touch ran-$ROLE; case $ROLE in fail*) exit 1;; hang*) sleep 30;; \
+             slowpass*) sleep 0.7;; slowfail*) sleep 0.5; exit 1;; esac"
+                .to_string(),
         ];
         let role = |r: &str| {
             let (mut bin, _) = sh("");
@@ -806,7 +813,7 @@ mod tests {
             early_kill: false,
         };
         let step = |bin| Step { bin, args: None };
-        let limit = Some(Duration::from_millis(500));
+        let limit = Some(secs(1));
         let run = |bins: &[TestBinary], order: &[usize], decides: bool| {
             let steps: Vec<Step> = order.iter().map(|&b| step(b)).collect();
             tests
@@ -842,6 +849,11 @@ mod tests {
         ];
         assert_eq!(run(&bins, &[2, 3, 1, 0], true), Ran::Caught);
         assert!(ran("pass-e") && ran("fail-e") && !ran("fail-f"));
+        // the quicker binary passes but leaves the other too little of the
+        // limit to fail in: that one gets the limit anew
+        let bins = [role("slowfail-i"), role("slowpass-i")];
+        assert_eq!(run(&bins, &[1, 0], true), Ran::Caught);
+        assert_eq!(run(&bins, &[1, 0], false), Ran::Timeout);
         // an earlier one that hangs too: still a time-out
         let bins = [role("hang-g"), role("hang-h")];
         assert_eq!(run(&bins, &[1, 0], true), Ran::Timeout);

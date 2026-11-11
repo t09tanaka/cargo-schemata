@@ -358,7 +358,8 @@ the old behaviour (every test, no early end):
   binary that cargo built first, and that would hang, comes before it without
   routing. The other way round nothing changes: when a binary does not end
   within the limit, the binaries that come before it in cargo's order and have
-  not run yet are run, and the mutant is caught if one of them fails.
+  not run yet are run, and then that binary once more if others ran before it
+  and used part of its time; the mutant is caught if one of them fails.
 
 ### Time limits
 
