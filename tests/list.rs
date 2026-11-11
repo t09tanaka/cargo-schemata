@@ -96,6 +96,8 @@ fn usage_errors_exit_2() {
         vec!["--list", "--shard", "1"],
         vec!["--list", "--shard", "0/0"],
         vec!["--list", "--shard", "a/b"],
+        vec!["--list", "--shard", "0/2", "--sharding", "zigzag"],
+        vec!["--list", "--sharding", "slice"],
         vec!["--list", "--in-diff"],
         vec!["--list", "-j", "2"],
         vec!["--bogus"],
@@ -188,4 +190,50 @@ fn unknown_config_keys_are_refused_and_known_ones_warned_about() {
     assert!(stdout.contains("replace add"), "{stdout}");
     assert!(!stdout.contains("is_zero"), "{stdout}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn list_lines(args: &[&str]) -> Vec<String> {
+    let args: Vec<String> = args.iter().map(|a| (*a).to_owned()).collect();
+    let (stdout, stderr, code) = run("kitchen_sink", &args);
+    assert_eq!(code, 0, "{args:?}: {stderr}");
+    stdout.lines().map(str::to_owned).collect()
+}
+
+#[test]
+fn shards_divide_the_list_by_round_robin_or_slice() {
+    let all = list_lines(&["--list"]);
+    let n = 3;
+    assert!(all.len() > 2 * n, "{}", all.len());
+    for (mode, extra) in [
+        ("round-robin", vec!["--sharding", "round-robin"]),
+        ("round-robin (default)", vec![]),
+        ("slice", vec!["--sharding", "slice"]),
+    ] {
+        let parts: Vec<Vec<String>> = (0..n)
+            .map(|k| {
+                let shard = format!("{k}/{n}");
+                let mut args = vec!["--list", "--shard", shard.as_str()];
+                args.extend(&extra);
+                list_lines(&args)
+            })
+            .collect();
+        let want: Vec<Vec<String>> = if mode == "slice" {
+            all.chunks(all.len().div_ceil(n))
+                .map(<[_]>::to_vec)
+                .collect()
+        } else {
+            (0..n)
+                .map(|k| all.iter().skip(k).step_by(n).cloned().collect())
+                .collect()
+        };
+        assert_eq!(parts, want, "{mode}");
+        // together, each mutant exactly once
+        let mut joined: Vec<String> = parts.concat();
+        joined.sort();
+        let mut sorted = all.clone();
+        sorted.sort();
+        assert_eq!(joined, sorted, "{mode}");
+    }
+    // the same on every call: the list order does not change
+    assert_eq!(list_lines(&["--list"]), all);
 }

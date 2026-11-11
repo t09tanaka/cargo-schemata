@@ -38,6 +38,7 @@ const USED_KEYS: &[&str] = &[
     "examine_re",
     "exclude_globs",
     "exclude_re",
+    "sharding",
     "skip_calls",
     "skip_calls_defaults",
 ];
@@ -62,7 +63,6 @@ const UNUSED_KEYS: &[&str] = &[
     "test_workspace",
     "timeout_multiplier",
     "test_tool",
-    "sharding",
 ];
 
 /// The subset of the `.cargo/mutants.toml` configuration that affects listing.
@@ -82,6 +82,8 @@ pub struct Config {
     pub exclude_globs: Vec<String>,
     /// Exclude mutants whose name matches these regexps.
     pub exclude_re: Vec<String>,
+    /// How `--shard` divides the mutants; `--sharding` wins.
+    pub sharding: Option<crate::shard::Sharding>,
     /// Skip calls to functions or methods with these names.
     pub skip_calls: Vec<String>,
     /// Use built-in defaults for `skip_calls` in addition to any explicit values.
@@ -357,6 +359,14 @@ mod test {
         let config = Config::read_file(&path).unwrap();
         assert_eq!(config.exclude_re, ["x"]);
         assert_eq!(config.skip_calls_defaults, Some(false));
+        assert_eq!(config.sharding, Some(crate::shard::Sharding::Slice));
+        std::fs::write(&path, "sharding = \"round-robin\"\n").unwrap();
+        assert_eq!(
+            Config::read_file(&path).unwrap().sharding,
+            Some(crate::shard::Sharding::RoundRobin)
+        );
+        std::fs::write(&path, "sharding = \"zigzag\"\n").unwrap();
+        assert!(Config::read_file(&path).is_err());
         // `emit_diffs` is not a key of cargo-mutants' file either
         std::fs::write(&path, "emit_diffs = true\n").unwrap();
         assert!(Config::read_file(&path).is_err());

@@ -44,7 +44,7 @@ use crate::mutant::Mutant;
 use crate::options::{Config, Filters, Options, Usage};
 use crate::prepare::Single;
 use crate::results::{Counts, MutantResult, Status};
-use crate::shard::Shard;
+use crate::shard::{Shard, Sharding};
 use crate::workspace::{Package, PackageFilter, Workspace};
 
 /// Mutation testing for Rust that builds mutants once, as schemata.
@@ -126,11 +126,24 @@ struct Args {
     #[arg(long, short = 'D', value_name = "FILE", help_heading = "Filters")]
     in_diff: Option<Utf8PathBuf>,
 
-    /// Run only part `k` of `n` of the mutants (`k` from 0), like cargo-mutants: part
-    /// 0 gets the first `ceil(total / n)` mutants, and so on. The report is then a part;
+    /// Run only part `k` of `n` of the mutants (`k` from 0), taken from the list as
+    /// `--list` shows it (the same on every machine). The report is then a part;
     /// `cargo schemata merge` puts the parts together.
     #[arg(long, value_name = "K/N", help_heading = "Filters")]
     shard: Option<Shard>,
+
+    /// How `--shard` divides the mutants: `round-robin` gives mutant `i` of the list
+    /// to part `i mod n` (the default; it spreads slow mutants that sit together),
+    /// `slice` gives consecutive ranges, the first `ceil(total / n)` to part 0. Every
+    /// part of a run needs the same value.
+    #[arg(
+        long,
+        value_enum,
+        value_name = "METHOD",
+        requires = "shard",
+        help_heading = "Filters"
+    )]
+    sharding: Option<Sharding>,
 
     /// Mutate only this package; may be repeated.
     #[arg(long = "package", short = 'p', help_heading = "Filters")]
@@ -348,12 +361,14 @@ struct Setup {
     empty_globs: Vec<EmptyGlob>,
     /// `--in-diff` left nothing to test (the diff is empty, or touches no mutant).
     diff_left_nothing: bool,
+    /// How `--shard` divides the mutants (`--sharding`, the config, or the default).
+    sharding: Sharding,
 }
 
 /// The mutants of one part of a divided run, or all of them.
-fn part_of(all: &[Mutant], shard: Option<Shard>) -> Vec<Mutant> {
+fn part_of(all: &[Mutant], shard: Option<Shard>, sharding: Sharding) -> Vec<Mutant> {
     match shard {
-        Some(shard) => all[shard.range(all.len())].to_vec(),
+        Some(shard) => sharding.select(shard, all),
         None => all.to_vec(),
     }
 }
@@ -422,6 +437,7 @@ fn discover(args: &Args) -> Result<Setup> {
         mutants,
         empty_globs,
         diff_left_nothing,
+        sharding: args.sharding.or(config.sharding).unwrap_or_default(),
     })
 }
 
@@ -442,7 +458,7 @@ fn run_list_or_build(args: &Args) -> Result<String> {
         // as cargo-mutants: nothing to list or build, and not even an empty list
         return Ok(String::new());
     }
-    setup.mutants = part_of(&setup.mutants, args.shard);
+    setup.mutants = part_of(&setup.mutants, args.shard, setup.sharding);
     if args.build_only {
         let _lock = lock::Lock::acquire(&schemata_dir(&setup.workspace))?;
         let mut prepared = prepare::prepare(
@@ -478,10 +494,11 @@ fn run_tests(args: &Args) -> Result<i32> {
         packages,
         mutants: all_mutants,
         empty_globs,
+        sharding,
         ..
     } = setup;
     // The mutants of this part of the run; the report lists all of them.
-    let mutants = part_of(&all_mutants, args.shard);
+    let mutants = part_of(&all_mutants, args.shard, sharding);
     let json = args.json;
     // With --json, stdout is the report alone.
     let say = move |line: String| {
@@ -711,7 +728,11 @@ fn run_tests(args: &Args) -> Result<i32> {
 
     results.sort_by_key(|r| r.id);
     let counts = Counts::of(&results);
-    let report = results::report_json(&all_mutants, &results, args.shard.map(|s| (s.k, s.n)));
+    let report = results::report_json(
+        &all_mutants,
+        &results,
+        args.shard.map(|s| (s.k, s.n, sharding)),
+    );
     results::write_output(out_dir, &mutants, &results, &report)?;
     if json {
         println!(

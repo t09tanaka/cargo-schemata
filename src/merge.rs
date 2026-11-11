@@ -9,13 +9,14 @@ use camino::Utf8PathBuf;
 use serde_json::Value;
 
 use crate::results::{self, OUTPUT_FILES};
-use crate::shard::Shard;
+use crate::shard::{Shard, Sharding};
 
 /// One part: where it was read from, which part it is, and the report.
 struct Part {
     path: String,
     index: usize,
     count: usize,
+    sharding: Sharding,
     order: Vec<String>,
     report: Value,
 }
@@ -37,6 +38,15 @@ fn read_part(path: &Utf8PathBuf) -> Result<Part, String> {
             "{path}: not the report of a part (a run with `--shard` writes `config.shard`)"
         ));
     };
+    // reports of 0.3.0 say nothing and are slices
+    let Some(sharding) = Sharding::from_name(match &shard["sharding"] {
+        Value::Null => None,
+        v => Some(v.as_str().unwrap_or("?")),
+    }) else {
+        return Err(format!(
+            "{path}: not the report of a part (`config.shard.sharding` is wrong)"
+        ));
+    };
     let order: Option<Vec<String>> = order
         .iter()
         .map(|v| v.as_str().map(str::to_owned))
@@ -47,6 +57,7 @@ fn read_part(path: &Utf8PathBuf) -> Result<Part, String> {
             path: path.to_string(),
             index,
             count,
+            sharding,
             order,
             report,
         }),
@@ -109,6 +120,17 @@ fn problems(parts: &[Part]) -> Vec<String> {
             ));
         }
     }
+    for p in parts {
+        if p.sharding != first.sharding {
+            out.push(format!(
+                "{} was divided with --sharding {} but {} with --sharding {}: the runs were divided differently",
+                p.path,
+                p.sharding.name(),
+                first.path,
+                first.sharding.name()
+            ));
+        }
+    }
     if !out.is_empty() {
         return out;
     }
@@ -152,16 +174,15 @@ fn problems(parts: &[Part]) -> Vec<String> {
         return out;
     }
     for p in parts {
-        let own = Shard {
+        let shard = Shard {
             k: p.index,
             n: count,
-        }
-        .range(first.order.len());
+        };
         for (pos, id) in first.order.iter().enumerate() {
             let (path, i) = &at[id];
             let m = &p.report["files"][path]["mutants"][*i];
             let pending = status_of(m) == "Pending";
-            if own.contains(&pos) == pending {
+            if first.sharding.owns(shard, pos, first.order.len()) == pending {
                 out.push(format!(
                     "{}: {id} is {} in part {}/{count}",
                     p.path,
@@ -220,9 +241,7 @@ pub fn merge(paths: &[Utf8PathBuf], out_dir: &Path, json: bool) -> Result<i32> {
     let mut lists: BTreeMap<&str, String> = BTreeMap::new();
     let mut counts = [0usize; 4];
     for (pos, id) in first.order.iter().enumerate() {
-        let owner = (0..parts.len())
-            .find(|&k| Shard { k, n: first.count }.range(total).contains(&pos))
-            .expect("every position belongs to a part");
+        let owner = first.sharding.owner(first.count, pos, total);
         let (path, i) = &at[id];
         let m = by_index[&owner].report["files"][path]["mutants"][*i].clone();
         let (file, word) = match status_of(&m) {
