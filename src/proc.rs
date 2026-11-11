@@ -263,6 +263,51 @@ mod tests {
         assert!(!is_failed_line("test a::b ... FAILED later"));
         assert!(!is_failed_line("test a::b ... FAILED <s>"));
         assert!(!is_failed_line("a child said ... FAILED"));
+        // what else libtest prints when a test fails, or does not run
+        assert!(!is_failed_line("test a::b ... ignored"));
+        assert!(!is_failed_line("test a::b ... ok"));
+        assert!(!is_failed_line(
+            "test a::b has been running for over 60 seconds"
+        ));
+        assert!(!is_failed_line("failures:"));
+        assert!(!is_failed_line("---- a::b stdout ----"));
+        assert!(!is_failed_line(
+            "test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"
+        ));
+        assert!(!is_failed_line("error: test failed, to rerun pass `--lib`"));
+        // not at the start of the line, or not the end of it
+        assert!(!is_failed_line(" test a::b ... FAILED"));
+        assert!(!is_failed_line("test a::b ... FAILED "));
+        assert!(!is_failed_line("test a::b ... failed"));
+        assert!(!is_failed_line("test a::b ... "));
+        // a doc test, and a test of `should_panic` that did not panic
+        assert!(is_failed_line("test src/lib.rs - add (line 3) ... FAILED"));
+        assert!(is_failed_line("test a::b - should panic ... FAILED"));
+    }
+
+    fn watched(input: &'static [u8]) -> bool {
+        let hit = Arc::new(AtomicBool::new(false));
+        watch(input, hit.clone()).join().unwrap();
+        hit.load(Ordering::Relaxed)
+    }
+
+    #[test]
+    fn the_watcher_reads_whole_lines() {
+        assert!(watched(
+            b"running 2 tests\ntest a ... ok\ntest b ... FAILED\n"
+        ));
+        // Windows line ends, and a last line without one
+        assert!(watched(b"test b ... FAILED\r\n"));
+        assert!(watched(b"test a ... ok\ntest b ... FAILED"));
+        // bytes that are not UTF-8 on another line
+        assert!(watched(b"\xff\xfe\ntest b ... FAILED\n"));
+        assert!(!watched(
+            b"running 1 test\ntest a ... ok\n\ntest result: ok.\n"
+        ));
+        // the words are there, but not as one line of their own
+        assert!(!watched(b"test a ... ok\nFAILED\n"));
+        assert!(!watched(b"note: test b ... FAILED\n"));
+        assert!(!watched(b""));
     }
 
     #[test]

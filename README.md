@@ -312,12 +312,16 @@ file). Without the variable the module costs what it did.
 3. A mutant is run with `<bin> --exact a b c`, the tests that reached it, and
    a binary none of whose tests reached it is not started. Your name filters and
    `--skip` only choose the tests that are listed; other arguments
-   (`--test-threads`, `--nocapture`, `--ignored`) are kept.
+   (`--test-threads`, `--nocapture`, `--ignored`) are kept. When several
+   binaries have tests that reached it, the one whose tests took the least time
+   during tracing is started first (a binary that runs whole counts with its
+   time in the baseline), and the others only if it passes: a quick unit test
+   that fails spares the mutant a slow integration test binary.
 4. A mutant that no test reaches, even in the baseline, is not run: it is
    *missed*, `statusReason` of the report says `not reached by any test`, and the
    terminal says so (`missed (not reached by any test)`).
 5. A mutant the baseline reaches but no test reaches alone (state that an
-   earlier test set up) gets all the tests.
+   earlier test set up) gets all the tests, the quickest binary first.
 
 When a failed test is reported (`test <name> ... FAILED`), the processes of the
 mutant are killed and the mutant is *caught*; libtest decides, so `should_panic`
@@ -349,7 +353,13 @@ the old behaviour (every test, no early end):
 - A child process of a test that inherits stdout and prints a line like
   `test x ... FAILED` ends the mutant early as caught (see above).
 - A mutant that makes the tests hang after one of them has failed is a
-  `timeout` without routing and *caught* with it.
+  `timeout` without routing and *caught* with it. The same holds for two
+  binaries: when the quicker one fails, the mutant is caught although a slower
+  binary that cargo built first, and that would hang, comes before it without
+  routing. The other way round nothing changes: when a binary does not end
+  within the limit, the binaries that come before it in cargo's order and have
+  not run yet are run, and then that binary once more if others ran before it
+  and used part of its time; the mutant is caught if one of them fails.
 
 ### Time limits
 

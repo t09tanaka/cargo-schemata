@@ -151,18 +151,19 @@ impl Routing {
         let hits = self.reach.get(&id);
         let any = hits.is_some_and(|h| h.iter().any(|b| !b.is_empty()));
         if !any {
-            return (Plan::Steps((0..nbins).map(whole).collect()), None);
+            let mut steps: Vec<Step> = (0..nbins).map(whole).collect();
+            steps.sort_by_key(|s| self.bins.get(s.bin).map_or(Duration::MAX, |r| r.whole));
+            return (Plan::Steps(steps), None);
         }
         let hits = hits.expect("any hit");
-        let mut steps = Vec::new();
-        let mut estimate = Duration::ZERO;
+        // Each step with what it took without a mutant.
+        let mut steps: Vec<(Duration, Step)> = Vec::new();
         for (bin, route) in self.bins.iter().enumerate() {
             if !route.traced {
-                steps.push(whole(bin));
-                estimate += route.whole;
+                steps.push((route.whole, whole(bin)));
                 continue;
             }
-            let tests = &hits[bin];
+            let mut tests = hits[bin].clone();
             if tests.is_empty() {
                 continue;
             }
@@ -170,21 +171,33 @@ impl Routing {
             if tests.len() * 100 >= route.tests.len() * WHOLE_BINARY_PERCENT
                 || bytes > MAX_NAMES_BYTES
             {
-                steps.push(whole(bin));
-                estimate += route.whole;
+                steps.push((route.whole, whole(bin)));
                 continue;
             }
-            estimate += tests.iter().map(|&t| route.times[t]).sum::<Duration>();
+            // The quickest first here too. libtest runs the tests it is given
+            // in the order of their names, not of the arguments, so this does
+            // not change which test of a binary runs first.
+            tests.sort_by_key(|&t| (route.times[t], t));
+            let took = tests.iter().map(|&t| route.times[t]).sum::<Duration>();
             let mut args = self.rest.clone();
             if !args.iter().any(|a| a == "--exact") {
                 args.push("--exact".to_owned());
             }
             args.extend(tests.iter().map(|&t| route.tests[t].clone()));
-            steps.push(Step {
-                bin,
-                args: Some(args),
-            });
+            steps.push((
+                took,
+                Step {
+                    bin,
+                    args: Some(args),
+                },
+            ));
         }
+        let estimate = steps.iter().map(|s| s.0).sum();
+        // The quickest step first: the first step that fails catches the mutant
+        // and the later ones are not started. The sort is stable, so steps that
+        // took the same stay in the order of the binaries.
+        steps.sort_by_key(|s| s.0);
+        let steps = steps.into_iter().map(|s| s.1).collect();
         (Plan::Steps(steps), Some(estimate))
     }
 }
@@ -661,5 +674,68 @@ mod tests {
         };
         assert_eq!(steps.len(), 2);
         assert_eq!(steps[1], Step { bin: 1, args: None });
+    }
+
+    #[test]
+    fn the_quickest_step_and_the_quickest_test_come_first() {
+        let ms = Duration::from_millis;
+        let bin = |traced: bool, times: &[u64], whole: u64| BinRoute {
+            traced,
+            tests: (0..times.len()).map(|i| format!("t{i}")).collect(),
+            times: times.iter().map(|&t| ms(t)).collect(),
+            whole: ms(whole),
+        };
+        let r = Routing {
+            bins: vec![
+                // 0: two slow tests reach the mutant
+                bin(true, &[900, 10, 10, 10, 600, 10, 10, 10, 10, 10], 2000),
+                // 1: not traced, runs whole in 700 ms
+                bin(false, &[], 700),
+                // 2: nothing reaches the mutant
+                bin(true, &[5, 5, 5], 20),
+                // 3: one quick test and two that took the same
+                bin(true, &[40, 30, 10, 10, 30, 10, 10, 10, 10, 10], 300),
+                // 4: runs whole (2 of 2 tests), as long as binary 1
+                bin(true, &[1, 1], 700),
+            ],
+            rest: v(&["--test-threads", "2"]),
+            global: [1, 2].into(),
+            reach: HashMap::from([(
+                1,
+                vec![vec![0, 4], vec![], vec![], vec![0, 1, 4], vec![0, 1]],
+            )]),
+        };
+        let listed = |bin, names: &[&str]| {
+            let mut args = v(&["--test-threads", "2", "--exact"]);
+            args.extend(v(names));
+            Step {
+                bin,
+                args: Some(args),
+            }
+        };
+        let whole = |bin| Step { bin, args: None };
+        let (plan, estimate) = r.plan_and_estimate(1, 5);
+        assert_eq!(
+            plan,
+            Plan::Steps(vec![
+                // 100 ms; t1 and t4 took the same and keep their order
+                listed(3, &["t1", "t4", "t0"]),
+                // 700 ms each: the order of the binaries
+                whole(1),
+                whole(4),
+                // 1500 ms
+                listed(0, &["t4", "t0"]),
+            ])
+        );
+        // the estimate does not depend on the order
+        assert_eq!(estimate, Some(ms(100 + 700 + 700 + 1500)));
+
+        // no single test reaches the mutant: every binary whole, the quickest first
+        let (plan, estimate) = r.plan_and_estimate(2, 5);
+        assert_eq!(
+            plan,
+            Plan::Steps(vec![whole(2), whole(3), whole(1), whole(4), whole(0)])
+        );
+        assert_eq!(estimate, None);
     }
 }
