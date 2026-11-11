@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.0 - 2026-11-11
+
+- **`--sharding round-robin|slice`, and `round-robin` is the new default.**
+  `--shard k/n` used to give part `k` a consecutive slice of the mutant list.
+  Slow mutants sit together, so parts took very different times (the slowest of four parts of one crate of about 1000
+  mutants took nearly twice as long as the fastest), and the slowest decided the
+  time of the run. Round-robin gives mutant `i` of the list to part
+  `i mod n`. `--sharding slice` (or `sharding = "slice"` in `.cargo/mutants.toml`,
+  now used) is the old division, and what cargo-mutants does by default. The
+  order of the list is the same on every machine, so all parts agree.
+- **Changed behaviour:** without `--sharding`, a part gets other mutants than in
+  0.3.0. Use one version and one `--sharding` for all the parts of a run, or pass
+  `--sharding slice` to keep the old division.
+- `config.shard.sharding` in the report of a part says how it was divided.
+  `cargo schemata merge` refuses parts that were divided with different values
+  (a 0.3.0 report has none and counts as `slice`), and checks that together the
+  parts evaluate every mutant exactly once.
+
 ## 0.3.0 - 2026-11-11
 
 - **With routing and two or more jobs, a mutant in an endless loop frees its

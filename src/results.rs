@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
 use crate::mutant::Mutant;
+use crate::shard::Sharding;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
@@ -113,14 +114,14 @@ pub fn clear_output(dir: &Path) -> Result<()> {
 
 /// The report, in the mutation-testing-elements schema, version 2.
 ///
-/// For one part of a divided run (`shard` is `(k, n)`), `mutants` is the whole
+/// For one part of a divided run (`shard` is `(k, n, how it was divided)`), `mutants` is the whole
 /// list: the ones of the other parts have no result and are `Pending`, and
 /// `config.shard` says which part this is and the order of the whole list, which
 /// `merge` needs. Without `shard`, a mutant without a result is left out.
 pub fn report_json(
     mutants: &[Mutant],
     results: &[MutantResult],
-    shard: Option<(usize, usize)>,
+    shard: Option<(usize, usize, Sharding)>,
 ) -> Value {
     let mut order: Vec<String> = Vec::new();
     let by_id: BTreeMap<usize, &MutantResult> = results.iter().map(|r| (r.id, r)).collect();
@@ -168,8 +169,10 @@ pub fn report_json(
         "framework": {"name": "cargo-schemata", "version": env!("CARGO_PKG_VERSION")},
         "files": files,
     });
-    if let Some((k, n)) = shard {
-        report["config"] = json!({"shard": {"index": k, "count": n, "order": order}});
+    if let Some((k, n, sharding)) = shard {
+        report["config"] = json!({"shard": {
+            "index": k, "count": n, "sharding": sharding.name(), "order": order,
+        }});
     }
     report
 }

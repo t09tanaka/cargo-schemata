@@ -28,15 +28,61 @@ impl FromStr for Shard {
     }
 }
 
-impl Shard {
-    /// The positions (in the list of `total` mutants) that belong to this part:
-    /// consecutive ranges, the first `ceil(total / n)` to part 0, and so on
-    /// (the `slice` method of cargo-mutants, its default).
-    pub fn range(self, total: usize) -> std::ops::Range<usize> {
-        let chunk_size = total.div_ceil(self.n);
-        let start = (self.k * chunk_size).min(total);
-        let end = ((self.k + 1) * chunk_size).min(total);
-        start..end
+/// How the mutants are divided between the parts (`--sharding`, as in
+/// cargo-mutants).
+///
+/// Both work on the list of mutants as `--list` shows it, after `--in-diff` and
+/// the other filters. That order is the same on every machine for the same source
+/// tree and options, so the parts of one run agree on who has which mutant.
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, clap::ValueEnum, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Sharding {
+    /// Mutant `i` of the list goes to part `i mod n`. Slow mutants tend to sit
+    /// together (in one file), and this spreads them over all the parts.
+    #[default]
+    RoundRobin,
+    /// Consecutive ranges: the first `ceil(total / n)` mutants to part 0, and so on.
+    Slice,
+}
+
+impl Sharding {
+    /// The name in `--sharding`, and in `config.shard.sharding` of a report.
+    pub fn name(self) -> &'static str {
+        match self {
+            Sharding::RoundRobin => "round-robin",
+            Sharding::Slice => "slice",
+        }
+    }
+
+    /// The mode a part's report names; `slice` when it names none (what 0.3.0 wrote).
+    pub fn from_name(name: Option<&str>) -> Option<Sharding> {
+        match name {
+            None | Some("slice") => Some(Sharding::Slice),
+            Some("round-robin") => Some(Sharding::RoundRobin),
+            Some(_) => None,
+        }
+    }
+
+    /// Whether position `pos` in a list of `total` mutants belongs to `shard`.
+    pub fn owns(self, shard: Shard, pos: usize, total: usize) -> bool {
+        self.owner(shard.n, pos, total) == shard.k
+    }
+
+    /// The part that position `pos` in a list of `total` mutants belongs to.
+    pub fn owner(self, n: usize, pos: usize, total: usize) -> usize {
+        match self {
+            Sharding::RoundRobin => pos % n,
+            Sharding::Slice => pos / total.div_ceil(n),
+        }
+    }
+
+    /// The mutants of `shard`, in list order.
+    pub fn select<T: Clone>(self, shard: Shard, all: &[T]) -> Vec<T> {
+        all.iter()
+            .enumerate()
+            .filter(|&(pos, _)| self.owns(shard, pos, all.len()))
+            .map(|(_, m)| m.clone())
+            .collect()
     }
 }
 
@@ -61,10 +107,14 @@ mod tests {
         assert!("-1/2".parse::<Shard>().is_err());
     }
 
+    fn part(mode: Sharding, k: usize, n: usize, total: usize) -> Vec<usize> {
+        let all: Vec<usize> = (0..total).collect();
+        mode.select(Shard { k, n }, &all)
+    }
+
     #[test]
     fn slices_are_consecutive_and_cover_everything() {
-        let all: Vec<usize> = (0..10).collect();
-        let part = |k, n| all[Shard { k, n }.range(all.len())].to_vec();
+        let part = |k, n| part(Sharding::Slice, k, n, 10);
         assert_eq!(part(0, 4), [0, 1, 2]);
         assert_eq!(part(1, 4), [3, 4, 5]);
         assert_eq!(part(2, 4), [6, 7, 8]);
@@ -73,13 +123,67 @@ mod tests {
         assert_eq!(part(9, 12), [9]);
         assert_eq!(part(10, 12), Vec::<usize>::new());
         assert_eq!(part(11, 12), Vec::<usize>::new());
-        assert_eq!(part(4, 12), [4]);
-        assert_eq!(part(0, 1), all);
-        for n in 1..13 {
-            let joined: Vec<usize> = (0..n).flat_map(|k| part(k, n)).collect();
-            assert_eq!(joined, all, "n = {n}");
+        assert_eq!(part(0, 1), (0..10).collect::<Vec<_>>());
+        assert!(
+            Sharding::Slice
+                .select(Shard { k: 2, n: 3 }, &[0u8; 0])
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn round_robin_deals_the_mutants_out_in_turn() {
+        // the example of cargo-mutants
+        let part = |k, n| part(Sharding::RoundRobin, k, n, 10);
+        assert_eq!(part(0, 4), [0, 4, 8]);
+        assert_eq!(part(1, 4), [1, 5, 9]);
+        assert_eq!(part(2, 4), [2, 6]);
+        assert_eq!(part(3, 4), [3, 7]);
+        // more parts than mutants: the last parts are empty
+        assert_eq!(part(9, 12), [9]);
+        assert_eq!(part(10, 12), Vec::<usize>::new());
+        assert_eq!(part(0, 1), (0..10).collect::<Vec<_>>());
+        assert!(
+            Sharding::RoundRobin
+                .select(Shard { k: 2, n: 3 }, &[0u8; 0])
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn every_mutant_has_exactly_one_part_in_both_modes() {
+        for mode in [Sharding::RoundRobin, Sharding::Slice] {
+            for total in 0..30 {
+                for n in 1..35 {
+                    let mut seen = vec![0; total];
+                    for k in 0..n {
+                        for pos in part(mode, k, n, total) {
+                            seen[pos] += 1;
+                            assert_eq!(mode.owner(n, pos, total), k, "{mode:?} {total} {n}");
+                        }
+                    }
+                    assert!(seen.iter().all(|&c| c == 1), "{mode:?} total {total} n {n}");
+                }
+            }
         }
-        assert_eq!(Shard { k: 2, n: 3 }.range(0), 0..0);
-        assert_eq!(Shard { k: 1, n: 4 }.range(10), 3..6);
+    }
+
+    #[test]
+    fn round_robin_spreads_a_cluster_of_slow_mutants() {
+        // 8 slow mutants in a row at the start of 16: a slice gives them to two parts
+        let load = |mode, k| part(mode, k, 4, 16).into_iter().filter(|&p| p < 8).count();
+        let loads = |mode| (0..4).map(|k| load(mode, k)).collect::<Vec<_>>();
+        assert_eq!(loads(Sharding::Slice), [4, 4, 0, 0]);
+        assert_eq!(loads(Sharding::RoundRobin), [2, 2, 2, 2]);
+    }
+
+    #[test]
+    fn names() {
+        assert_eq!(Sharding::default(), Sharding::RoundRobin);
+        for m in [Sharding::RoundRobin, Sharding::Slice] {
+            assert_eq!(Sharding::from_name(Some(m.name())), Some(m));
+        }
+        assert_eq!(Sharding::from_name(None), Some(Sharding::Slice));
+        assert_eq!(Sharding::from_name(Some("zigzag")), None);
     }
 }

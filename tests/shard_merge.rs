@@ -142,12 +142,18 @@ fn all_parts_merged_are_the_whole_run() {
         assert_eq!(mutants(&part).len(), total, "{shard}");
         let all = mutants(&part);
         let own: Vec<&&Value> = all.iter().filter(|m| m["status"] != "Pending").collect();
-        let chunk = total.div_ceil(n);
-        assert_eq!(
-            own.len(),
-            chunk.min(total - (k * chunk).min(total)),
-            "{shard}"
-        );
+        // round-robin is the default: mutant i goes to part i mod n
+        let dealt: Vec<&str> = (k..total)
+            .step_by(n)
+            .map(|i| part["config"]["shard"]["order"][i].as_str().unwrap())
+            .collect();
+        // the report groups the mutants by file, `order` is the order of the list
+        let mut own_ids: Vec<&str> = own.iter().map(|m| m["id"].as_str().unwrap()).collect();
+        own_ids.sort_unstable();
+        let mut dealt = dealt;
+        dealt.sort_unstable();
+        assert_eq!(own_ids, dealt, "{shard}");
+        assert_eq!(part["config"]["shard"]["sharding"], "round-robin");
         assert_eq!(part["config"]["shard"]["index"], k);
         assert_eq!(part["config"]["shard"]["count"], n);
         assert_eq!(
@@ -203,6 +209,103 @@ fn all_parts_merged_are_the_whole_run() {
     // --json prints the report
     let (_, stdout, _) = kit.merge("merged2", &parts, &["--json"]);
     assert_eq!(serde_json::from_str::<Value>(&stdout).unwrap(), merged);
+}
+
+/// The ids of the mutants a part evaluated.
+fn evaluated(report: &Value) -> Vec<String> {
+    mutants(report)
+        .iter()
+        .filter(|m| m["status"] != "Pending")
+        .map(|m| m["id"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn slice_parts_merge_too_and_the_two_modes_are_not_mixed() {
+    let kit = Kit::new("slice");
+    let (code, err) = kit.run("whole", &[]);
+    assert!(code <= 1, "{err}");
+    let whole = kit.report("whole");
+    let total = mutants(&whole).len();
+    for k in 0..2 {
+        let (code, err) = kit.run(
+            &format!("s{k}"),
+            &["--shard", &format!("{k}/2"), "--sharding", "slice"],
+        );
+        assert!(code <= 1, "{err}");
+    }
+    let (code, err) = kit.run("r1", &["--shard", "1/2", "--sharding", "round-robin"]);
+    assert!(code <= 1, "{err}");
+    let (code, err) = kit.run("r0", &["--shard", "0/2"]);
+    assert!(code <= 1, "{err}");
+
+    // slice: consecutive halves of the list
+    let (s0, s1) = (kit.report("s0"), kit.report("s1"));
+    assert_eq!(s0["config"]["shard"]["sharding"], "slice");
+    let order: Vec<String> = s0["config"]["shard"]["order"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_owned())
+        .collect();
+    let half = total.div_ceil(2);
+    let sorted = |mut v: Vec<String>| {
+        v.sort();
+        v
+    };
+    assert_eq!(sorted(evaluated(&s0)), sorted(order[..half].to_vec()));
+    assert_eq!(sorted(evaluated(&s1)), sorted(order[half..].to_vec()));
+    // round-robin is what a part gets without --sharding, and differs from a slice
+    assert_eq!(
+        kit.report("r1")["config"]["shard"]["sharding"],
+        "round-robin"
+    );
+    assert_ne!(evaluated(&kit.report("r1")), evaluated(&s1));
+
+    // each mode merges to the unsharded report
+    let (code, _, err) = kit.merge("m_slice", &[kit.part("s0"), kit.part("s1")], &[]);
+    assert!(code <= 1, "{err}");
+    assert_eq!(
+        without_durations(&kit.report("m_slice")),
+        without_durations(&whole)
+    );
+    let (code, _, err) = kit.merge("m_rr", &[kit.part("r0"), kit.part("r1")], &[]);
+    assert!(code <= 1, "{err}");
+    assert_eq!(
+        without_durations(&kit.report("m_rr")),
+        without_durations(&whole)
+    );
+
+    // a report that names no mode (0.3.0) is a slice
+    for k in 0..2 {
+        let mut old = kit.report(&format!("s{k}"));
+        old["config"]["shard"]
+            .as_object_mut()
+            .unwrap()
+            .remove("sharding");
+        std::fs::write(kit.out(&format!("old{k}.json")), old.to_string()).unwrap();
+    }
+    let (code, _, err) = kit.merge("m_old", &[kit.out("old0.json"), kit.out("old1.json")], &[]);
+    assert!(code <= 1, "{err}");
+    assert_eq!(
+        without_durations(&kit.report("m_old")),
+        without_durations(&whole)
+    );
+
+    // mixing the modes is refused, either way round, and nothing is written
+    for (name, parts) in [
+        ("mixed_a", [kit.part("s0"), kit.part("r1")]),
+        ("mixed_b", [kit.part("r0"), kit.part("s1")]),
+        ("mixed_old", [kit.out("old0.json"), kit.part("r1")]),
+    ] {
+        let (code, stdout, stderr) = kit.merge(name, &parts, &[]);
+        assert_eq!(code, 1, "{name}: {stderr}");
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("divided differently"), "{name}: {stderr}");
+        assert!(stderr.contains("--sharding"), "{name}: {stderr}");
+        assert!(stderr.contains("nothing was merged"), "{name}: {stderr}");
+        assert!(!kit.out(name).join("report.json").exists(), "{name}");
+    }
 }
 
 #[test]
