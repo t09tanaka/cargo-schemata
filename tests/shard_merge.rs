@@ -295,6 +295,49 @@ fn all_parts_merged_are_the_whole_run() {
         assert_eq!(kit.list("merged_reused", f), kit.list("whole", f), "{f}");
     }
 
+    // Other options than the trace was made with: each is refused before the
+    // build, and says which it is.
+    for (says, args) in [
+        (
+            "the arguments for cargo (after `--`) differ",
+            &["--", "--lib"][..],
+        ),
+        (
+            "the arguments for the test binaries (after `--`) differ",
+            &["--", "--", "--test-threads=1"],
+        ),
+        ("the mutants differ", &["-F", "add"]),
+        ("the mutants differ", &["-e", "lib.rs"]),
+    ] {
+        let mut with = vec!["--shard", "0/3", "--reuse-trace", trace_arg];
+        with.extend(args);
+        let (code, out, err) = kit.run_all("other", &with);
+        assert_eq!(code, 1, "{args:?}: {out}{err}");
+        assert!(err.contains("nothing was run"), "{args:?}: {err}");
+        assert!(err.contains(says), "{args:?}: {err}");
+        assert!(!out.contains("built: "), "{args:?}: {out}");
+        assert!(!kit.out("other").join("report.json").exists());
+    }
+    // and another --timeout (the kit gives 3 seconds to every other run)
+    let o = Command::new(env!("CARGO_BIN_EXE_cargo-schemata"))
+        .args(["schemata", "-d"])
+        .arg(&kit.dir)
+        .args(["-e", "main.rs", "-j", "2", "--timeout", "4", "-o"])
+        .arg(kit.out("other"))
+        .args(["--reuse-trace", trace_arg])
+        .env_remove("CARGO_TARGET_DIR")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .env_remove("RUSTFLAGS")
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert_eq!(o.status.code(), Some(1), "{err}");
+    assert!(
+        err.contains("--timeout differs: 3s in the file, 4s here"),
+        "{err}"
+    );
+    assert!(!kit.out("other").join("report.json").exists());
+
     // A source file changes after the trace was made (a comment: the mutants
     // are the same): the file is refused, nothing is built or run.
     let lib = kit.dir.join("src/lib.rs");
