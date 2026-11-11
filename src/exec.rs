@@ -134,10 +134,17 @@ impl Tests<'_> {
         let steps: Vec<Step> = (0..bins.len())
             .map(|bin| Step { bin, args: None })
             .collect();
-        self.run_steps(bins, &steps, mutant, job, timeout)
+        self.run_steps(bins, &steps, mutant, job, timeout, false)
     }
 
-    /// Like [`Tests::run`], for these steps only.
+    /// Like [`Tests::run`], for these steps, in the order given.
+    ///
+    /// The steps of a routed mutant are ordered by what they took, not by
+    /// binary. When one of them does not end within the limit, a binary that
+    /// comes before it in the order of the binaries may not have run yet; in
+    /// that order it would have run first and could have caught the mutant.
+    /// With `decides` (the result of this run is final) those steps are run
+    /// then, with the limit anew: caught if one fails, a time-out otherwise.
     pub fn run_steps(
         &self,
         bins: &[TestBinary],
@@ -145,33 +152,63 @@ impl Tests<'_> {
         mutant: Option<usize>,
         job: &str,
         timeout: Option<Duration>,
+        decides: bool,
     ) -> Result<(Ran, Duration)> {
         let tmp = self.tmp(job)?;
         let start = Instant::now();
+        for (n, step) in steps.iter().enumerate() {
+            let left = timeout.map(|t| t.saturating_sub(start.elapsed()));
+            match self.run_step(bins, step, mutant, &tmp, left)? {
+                Ran::Missed => {}
+                Ran::Timeout if decides => {
+                    let mut earlier: Vec<&Step> =
+                        steps[n + 1..].iter().filter(|s| s.bin < step.bin).collect();
+                    earlier.sort_by_key(|s| s.bin);
+                    let again = Instant::now();
+                    for step in earlier {
+                        let left = timeout.map(|t| t.saturating_sub(again.elapsed()));
+                        match self.run_step(bins, step, mutant, &tmp, left)? {
+                            Ran::Missed => {}
+                            Ran::Caught => return Ok((Ran::Caught, start.elapsed())),
+                            _ => break,
+                        }
+                    }
+                    return Ok((Ran::Timeout, start.elapsed()));
+                }
+                ran => return Ok((ran, start.elapsed())),
+            }
+        }
+        Ok((Ran::Missed, start.elapsed()))
+    }
+
+    /// One step with `left` to run: `Caught` when it fails, `Missed` when it
+    /// passes, `Timeout` when it does not end in time (or no time is left).
+    fn run_step(
+        &self,
+        bins: &[TestBinary],
+        step: &Step,
+        mutant: Option<usize>,
+        tmp: &Path,
+        left: Option<Duration>,
+    ) -> Result<Ran> {
+        interrupt::check()?;
+        if left == Some(Duration::ZERO) {
+            return Ok(Ran::Timeout);
+        }
         let sink = if self.early_kill {
             Sink::WatchFailed
         } else {
             Sink::Null
         };
-        for step in steps {
-            interrupt::check()?;
-            let left = timeout.map(|t| t.saturating_sub(start.elapsed()));
-            if left == Some(Duration::ZERO) {
-                return Ok((Ran::Timeout, start.elapsed()));
-            }
-            let args = step.args.as_deref().unwrap_or(self.bin_args);
-            let mut cmd = self.command(&bins[step.bin], args, mutant, None, &tmp);
-            let fin = run_group(&mut cmd, left, &sink)?;
-            if fin.early {
-                return Ok((Ran::Caught, start.elapsed()));
-            }
-            match fin.status {
-                None => return Ok((Ran::Timeout, start.elapsed())),
-                Some(status) if !status.success() => return Ok((Ran::Caught, start.elapsed())),
-                Some(_) => {}
-            }
-        }
-        Ok((Ran::Missed, start.elapsed()))
+        let args = step.args.as_deref().unwrap_or(self.bin_args);
+        let mut cmd = self.command(&bins[step.bin], args, mutant, None, tmp);
+        let fin = run_group(&mut cmd, left, &sink)?;
+        Ok(match fin.status {
+            _ if fin.early => Ran::Caught,
+            None => Ran::Timeout,
+            Some(status) if !status.success() => Ran::Caught,
+            Some(_) => Ran::Missed,
+        })
     }
 }
 
@@ -261,7 +298,11 @@ fn run_one(
     match plan {
         None => tests.run(bins, Some(id), job, Some(limit)),
         Some(Plan::Unreached) => Ok((Ran::Unreached, Duration::ZERO)),
-        Some(Plan::Steps(steps)) => tests.run_steps(bins, &steps, Some(id), job, Some(limit)),
+        Some(Plan::Steps(steps)) => {
+            // A first run of several jobs that reaches its limit is run again.
+            let decides = pass == Pass::Alone || pool.jobs < 2;
+            tests.run_steps(bins, &steps, Some(id), job, Some(limit), decides)
+        }
     }
 }
 
@@ -699,5 +740,111 @@ mod tests {
         );
         assert_eq!(reruns.load(Ordering::Relaxed), 1);
         assert_eq!(seen.lock().unwrap().len(), 4);
+    }
+
+    /// What a routed run with early kill does to three kinds of mutants.
+    #[test]
+    fn a_failed_line_ends_a_mutant_early_and_a_mutant_without_one_runs_to_its_end() {
+        let s = Scratch::new("first-failure");
+        let marks = s.0.join("marks");
+        std::fs::create_dir_all(&marks).unwrap();
+        // 1: a test fails at once, a slow one would still run for 30 s
+        // 2: no test fails; the tests take a second
+        // 3: the line of the failed test arrives in two writes
+        // 4: the binary is ended by a signal without reporting a test
+        let script = "case \"$CARGO_SCHEMATA_MUTANT\" in \
+            1) echo 'running 2 tests'; echo 'test quick ... FAILED'; sleep 30;; \
+            2) echo 'test quick ... ok'; echo 'failures: none, FAILED is only a word here'; \
+               sleep 1; echo 'test slow ... ok'; touch ended-2;; \
+            3) printf 'test quick ... '; sleep 0.3; echo FAILED; sleep 30;; \
+            4) echo 'test quick ... ok'; kill -ABRT $$;; \
+            esac";
+        let (mut bin, args) = sh(script);
+        bin.cwd = marks.to_string_lossy().into_owned();
+        let tests = Tests {
+            bin_args: &args,
+            tmp_root: &s.0.join("tmp"),
+            early_kill: true,
+        };
+        let pool = Pool {
+            jobs: 2,
+            timeout: secs(20),
+            routed_floor: None,
+            routing: None,
+        };
+        let results =
+            run_embedded(&tests, &[bin], &[1, 2, 3, 4], &pool, &|_, _, _| {}, &|_| {}).unwrap();
+        let ran: Vec<Ran> = results.iter().map(|r| r.1).collect();
+        assert_eq!(ran, [Ran::Caught, Ran::Missed, Ran::Caught, Ran::Caught]);
+        // caught long before the slow test would have ended
+        assert!(results[0].2 < secs(5), "{:?}", results[0].2);
+        assert!(results[2].2 < secs(5), "{:?}", results[2].2);
+        // the mutant that no test catches ran all of its tests
+        assert!(results[1].2 >= secs(1), "{:?}", results[1].2);
+        assert!(marks.join("ended-2").exists());
+    }
+
+    /// Steps that are not in the order of the binaries (a routed mutant's are
+    /// ordered by time): a step that does not end must not hide a failure in a
+    /// binary that the order of the binaries would have run before it.
+    #[test]
+    fn a_step_that_times_out_lets_the_earlier_binaries_decide() {
+        let s = Scratch::new("fallback");
+        let args = vec![
+            "-c".to_string(),
+            "touch ran-$ROLE; case $ROLE in fail*) exit 1;; hang*) sleep 30;; esac".to_string(),
+        ];
+        let role = |r: &str| {
+            let (mut bin, _) = sh("");
+            bin.cwd = s.0.to_string_lossy().into_owned();
+            bin.env.push(("ROLE".into(), r.into()));
+            bin
+        };
+        let tests = Tests {
+            bin_args: &args,
+            tmp_root: &s.0.join("tmp"),
+            early_kill: false,
+        };
+        let step = |bin| Step { bin, args: None };
+        let limit = Some(Duration::from_millis(500));
+        let run = |bins: &[TestBinary], order: &[usize], decides: bool| {
+            let steps: Vec<Step> = order.iter().map(|&b| step(b)).collect();
+            tests
+                .run_steps(bins, &steps, Some(1), "0", limit, decides)
+                .unwrap()
+                .0
+        };
+        let ran = |name: &str| s.0.join(format!("ran-{name}")).exists();
+
+        // binary 0 fails and binary 1 hangs; 1 is the quicker one without a mutant
+        let bins = [role("fail-a"), role("hang-a")];
+        assert_eq!(run(&bins, &[0, 1], true), Ran::Caught);
+        assert!(!ran("hang-a"));
+        assert_eq!(run(&bins, &[1, 0], true), Ran::Caught);
+        // a run that is made again alone does not spend the time
+        let bins = [role("fail-b"), role("hang-b")];
+        assert_eq!(run(&bins, &[1, 0], false), Ran::Timeout);
+        assert!(!ran("fail-b"));
+        // the earlier binary passes: the time-out stands
+        let bins = [role("pass-c"), role("hang-c")];
+        assert_eq!(run(&bins, &[1, 0], true), Ran::Timeout);
+        assert!(ran("pass-c"));
+        // a later binary would not have run in the order of the binaries either
+        let bins = [role("hang-d"), role("fail-d")];
+        assert_eq!(run(&bins, &[0, 1], true), Ran::Timeout);
+        assert!(!ran("fail-d"));
+        // of several earlier ones the first that fails decides; later ones are skipped
+        let bins = [
+            role("pass-e"),
+            role("fail-e"),
+            role("hang-e"),
+            role("fail-f"),
+        ];
+        assert_eq!(run(&bins, &[2, 3, 1, 0], true), Ran::Caught);
+        assert!(ran("pass-e") && ran("fail-e") && !ran("fail-f"));
+        // an earlier one that hangs too: still a time-out
+        let bins = [role("hang-g"), role("hang-h")];
+        assert_eq!(run(&bins, &[1, 0], true), Ran::Timeout);
+        assert!(ran("hang-g"));
     }
 }

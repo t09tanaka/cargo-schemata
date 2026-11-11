@@ -2,6 +2,24 @@
 
 ## 0.4.0 - 2026-11-11
 
+- **A routed mutant starts its quickest test binary first.** A mutant that is
+  reached by tests of several binaries ran them in the order cargo built them,
+  so a mutant that a unit test catches in milliseconds could first wait for a
+  slow integration test binary that passes. The binaries of a mutant are now
+  ordered by what its tests in each of them took alone during tracing (the time
+  in the baseline for a binary that runs whole); equal times keep cargo's
+  order. A mutant that no single test reaches gets every binary, the quickest
+  first. Within one binary nothing changes: since 0.2.0 the run ends at the
+  first `test <name> ... FAILED` line, and libtest runs the tests it is given in
+  the order of their names. Caught and missed mutants are the same as before; a
+  missed mutant still runs all of its tests.
+- A binary that does not end within the limit does not hide a failure in a
+  binary that used to run before it: the binaries that come before it in cargo's
+  order and have not run yet are run then (with the limit anew), and the mutant
+  is caught if one of them fails, a `timeout` otherwise. One result can differ
+  from 0.3.0: a mutant whose quicker binary fails is now caught where a slower
+  binary that came first and hangs made it a `timeout` (see "Where the result
+  can differ" in the README).
 - **`--sharding round-robin|slice`, and `round-robin` is the new default.**
   `--shard k/n` used to give part `k` a consecutive slice of the mutant list.
   Slow mutants sit together, so parts took very different times (the slowest of four parts of one crate of about 1000

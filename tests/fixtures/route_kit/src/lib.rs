@@ -43,6 +43,18 @@ pub fn gate() -> bool {
     true
 }
 
+/// A unit test catches its mutants at once; `late_slow` in `tests/other.rs`
+/// takes 2 s and passes whatever it returns.
+pub fn late() -> u32 {
+    5
+}
+
+/// The other way round: the unit test is the slow one that does not look, and
+/// `early_is_six` in `tests/other.rs` catches its mutants at once.
+pub fn early() -> u32 {
+    6
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,5 +101,17 @@ mod tests {
     fn gate_slow() {
         std::thread::sleep(Duration::from_secs(3));
         assert!(gate());
+    }
+
+    #[test]
+    fn late_is_five() {
+        assert_eq!(late(), 5);
+    }
+
+    // slow, and passes whatever `early` returns
+    #[test]
+    fn early_slow() {
+        std::thread::sleep(Duration::from_secs(2));
+        let _ = early();
     }
 }

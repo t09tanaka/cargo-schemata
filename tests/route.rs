@@ -160,7 +160,7 @@ fn routing_gives_the_results_of_a_full_run_and_is_faster() {
         "{}",
         text(&out.stderr)
     );
-    assert!(stdout.contains("traced: 8 tests run alone"), "{stdout}");
+    assert!(stdout.contains("traced: 10 tests run alone"), "{stdout}");
     assert!(stdout.contains("mutants: run in "), "{stdout}");
 
     // a mutant is run against the tests that reach it only: the 3 s test is not one of them
@@ -280,4 +280,29 @@ fn routing_works_on_a_part_of_the_mutants() {
         Some("not reached by any test")
     );
     assert!(stdout.contains("traced: "), "{stdout}");
+}
+
+/// `late` and `early` each have a quick test that catches their mutants in one
+/// test binary and a 2 s test that passes in the other. In the order the
+/// binaries were built, one of the two waits for its slow test first.
+#[test]
+fn the_quickest_binary_of_a_mutant_runs_first() {
+    let kit = Kit::new("order");
+    let (out, routed) = kit.run("routed", &[]);
+    let stdout = text(&out.stdout);
+    assert!(stdout.contains("traced: 12 tests run alone"), "{stdout}");
+    let entries = routed.entries();
+    for part in [
+        "replace late -> u32 with 0",
+        "replace late -> u32 with 1",
+        "replace early -> u32 with 0",
+        "replace early -> u32 with 1",
+    ] {
+        let e = find(&entries, part);
+        assert_eq!(e.status, "Killed", "{part}\n{stdout}");
+        assert!(e.millis < 1500, "{part}: {} ms\n{stdout}", e.millis);
+    }
+    // a mutant that survives still runs every test that reaches it, in both binaries
+    let (_, full) = kit.run("full", &["--no-routing"]);
+    assert_eq!(routed.statuses(), full.statuses(), "{stdout}");
 }
