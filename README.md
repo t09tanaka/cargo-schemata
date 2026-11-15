@@ -62,7 +62,7 @@ static initializers are listed like any other code.
 | `--list`                     | List the mutants                                                                         |
 | `--build-only`               | Rewrite and build the mutants once, and report how each was built (see below)            |
 | `--json`                     | Print JSON: the report of a run, or the list as `cargo mutants --list --json` does       |
-| `-j`, `--jobs <n>`           | How many test processes run at a time. Default: a quarter of the processors, at least 1 and at most 4 |
+| `-j`, `--jobs <n>`           | How many test processes run at a time. Default: `CARGO_SCHEMATA_JOBS` if set, else a quarter of the threads this run may use, at least 1 and at most 4 (see "Jobs and threads") |
 | `--no-routing`               | Run every test for every mutant, and do not end a run at the first failed test (see "Routing") |
 | `-t`, `--timeout <secs>`     | What one mutant's tests may take. Default: five times the time of the tests without a mutant, at least 20 seconds. With routing and two or more jobs, a first run is given up sooner and run again alone with this limit (see "Time limits") |
 | `-o`, `--output <dir>`       | Where `report.json` and the `*.txt` lists are written. Default: `schemata.out`           |
@@ -360,6 +360,23 @@ the old behaviour (every test, no early end):
   within the limit, the binaries that come before it in cargo's order and have
   not run yet are run, and then that binary once more if others ran before it
   and used part of its time; the mutant is caught if one of them fails.
+
+### Jobs and threads
+
+The threads this run may use (its *share*) are the first positive integer in
+`NEXTEST_TEST_THREADS`, `RUST_TEST_THREADS`, `CARGO_BUILD_JOBS`, else the number
+of processors. A runner that starts several `cargo schemata` processes (shards)
+on one machine sets one of them for each, so that they do not all use every
+core. Values that are no positive integer (`NEXTEST_TEST_THREADS=num-cpus`) are
+skipped.
+
+The jobs are `--jobs`, else `CARGO_SCHEMATA_JOBS` (a positive integer, or exit
+code 2), else a quarter of the share, at least 1 and at most 4. Every test
+process, the baseline included, is started with `RUST_TEST_THREADS` = share /
+jobs (at least 1), so jobs x threads stays within the share; a `--test-threads`
+after the second `--` wins. The baseline runs with the same thread count as the
+mutants, so the limit derived from it (see below) is that of the same
+conditions; nothing is skipped and no limit is raised for it.
 
 ### Time limits
 

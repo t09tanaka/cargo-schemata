@@ -598,6 +598,7 @@ mod tests {
             bin_args: &bin_args,
             tmp_root: &dir,
             early_kill: false,
+            test_threads: None,
         };
         // every mutant is reached by one test that took no time alone, so the
         // first run gets the floor

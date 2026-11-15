@@ -51,10 +51,65 @@ pub fn routed_timeout(estimate: Duration, floor: Duration, whole: Duration) -> D
     own.min(whole)
 }
 
-/// A quarter of the processors, at least 1 and at most 4.
-pub fn default_jobs() -> usize {
+/// Environment variables that say how many threads this run may use, in the
+/// order they are read; the first that holds a positive integer is the share.
+/// They are the ones a CI runner sets for a job that shares the machine.
+pub const SHARE_VARS: [&str; 3] = [
+    "NEXTEST_TEST_THREADS",
+    "RUST_TEST_THREADS",
+    "CARGO_BUILD_JOBS",
+];
+
+/// The variable that sets the default number of jobs directly.
+pub const JOBS_VAR: &str = "CARGO_SCHEMATA_JOBS";
+
+/// How many test processes run at a time, and how many threads each uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Parallelism {
+    pub jobs: usize,
+    /// `RUST_TEST_THREADS` for every test process: the share divided by the
+    /// jobs, at least 1, so that jobs x threads stays within the share.
+    pub test_threads: usize,
+}
+
+fn positive(value: Option<String>) -> Option<usize> {
+    value?.trim().parse::<usize>().ok().filter(|&n| n > 0)
+}
+
+/// The jobs and test threads of a run.
+///
+/// The share of threads is the first positive integer in [`SHARE_VARS`], else
+/// `cpus`. The jobs are `--jobs` (`cli_jobs`) when given, else
+/// [`JOBS_VAR`], else a quarter of the share, at least 1 and at most 4. A
+/// [`JOBS_VAR`] that is not a positive integer is a usage error, as is
+/// `--jobs 0`; the other variables are set by other tools and ignored when
+/// they are not (`NEXTEST_TEST_THREADS=num-cpus`).
+pub fn parallelism(
+    cli_jobs: Option<usize>,
+    cpus: usize,
+    get: &dyn Fn(&str) -> Option<String>,
+) -> Result<Parallelism> {
+    let share = SHARE_VARS
+        .iter()
+        .find_map(|v| positive(get(v)))
+        .unwrap_or(cpus.max(1));
+    let jobs = match (cli_jobs, get(JOBS_VAR)) {
+        (Some(j), _) => j,
+        (None, Some(v)) => positive(Some(v.clone())).ok_or_else(|| {
+            crate::options::Usage(format!("{JOBS_VAR} must be a positive integer, not `{v}`"))
+        })?,
+        (None, None) => (share / 4).clamp(1, 4),
+    };
+    Ok(Parallelism {
+        jobs,
+        test_threads: (share / jobs.max(1)).max(1),
+    })
+}
+
+/// [`parallelism`] for this process and machine.
+pub fn parallelism_from_env(cli_jobs: Option<usize>) -> Result<Parallelism> {
     let cpus = std::thread::available_parallelism().map_or(1, usize::from);
-    (cpus / 4).clamp(1, 4)
+    parallelism(cli_jobs, cpus, &|k| std::env::var(k).ok())
 }
 
 /// How the test binaries are started.
@@ -65,6 +120,9 @@ pub struct Tests<'a> {
     pub tmp_root: &'a Path,
     /// End a run as soon as libtest reports a failed test.
     pub early_kill: bool,
+    /// `RUST_TEST_THREADS` for every test process (`--test-threads` in
+    /// `bin_args` wins); the process's own value when `None`.
+    pub test_threads: Option<usize>,
 }
 
 /// One test binary to start for a mutant, and with which arguments.
@@ -99,6 +157,10 @@ impl Tests<'_> {
             .current_dir(&bin.cwd)
             .env_remove(MUTANT_ENV)
             .env_remove(TRACE_ENV)
+            .envs(
+                self.test_threads
+                    .map(|n| ("RUST_TEST_THREADS", n.to_string())),
+            )
             .envs(bin.env.iter().map(|(k, v)| (k, v)))
             .env("INSTA_UPDATE", "no")
             .env("TMPDIR", tmp);
@@ -469,9 +531,102 @@ mod tests {
         assert_eq!(routed_timeout(secs(5), secs(10), secs(20)), secs(20));
     }
 
+    fn env<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |k| {
+            pairs
+                .iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| (*v).to_owned())
+        }
+    }
+
+    fn par(cli: Option<usize>, cpus: usize, pairs: &[(&str, &str)]) -> Result<Parallelism> {
+        parallelism(cli, cpus, &env(pairs))
+    }
+
+    fn p(jobs: usize, test_threads: usize) -> Parallelism {
+        Parallelism { jobs, test_threads }
+    }
+
     #[test]
-    fn default_jobs_stay_between_one_and_four() {
-        assert!((1..=4).contains(&default_jobs()));
+    fn without_hints_a_quarter_of_the_processors_share_them() {
+        assert_eq!(par(None, 1, &[]).unwrap(), p(1, 1));
+        assert_eq!(par(None, 8, &[]).unwrap(), p(2, 4));
+        assert_eq!(par(None, 64, &[]).unwrap(), p(4, 16));
+    }
+
+    #[test]
+    fn a_share_hint_replaces_the_processors() {
+        // 64 processors, but this job may use 8 threads: 2 jobs x 4.
+        assert_eq!(
+            par(None, 64, &[("CARGO_BUILD_JOBS", "8")]).unwrap(),
+            p(2, 4)
+        );
+        assert_eq!(
+            par(None, 64, &[("RUST_TEST_THREADS", "2")]).unwrap(),
+            p(1, 2)
+        );
+    }
+
+    #[test]
+    fn share_hints_are_read_in_a_fixed_order() {
+        let all = [
+            ("CARGO_BUILD_JOBS", "16"),
+            ("RUST_TEST_THREADS", "8"),
+            ("NEXTEST_TEST_THREADS", "4"),
+        ];
+        assert_eq!(par(None, 64, &all).unwrap(), p(1, 4));
+        assert_eq!(par(None, 64, &all[..2]).unwrap(), p(2, 4));
+        // A value that is no positive integer is skipped.
+        let bad = [
+            ("NEXTEST_TEST_THREADS", "num-cpus"),
+            ("RUST_TEST_THREADS", "0"),
+        ];
+        assert_eq!(
+            par(None, 64, &[bad[0], bad[1], ("CARGO_BUILD_JOBS", "4")]).unwrap(),
+            p(1, 4)
+        );
+    }
+
+    #[test]
+    fn the_jobs_variable_comes_before_the_hints_and_the_option_before_both() {
+        let vars = [("CARGO_SCHEMATA_JOBS", "3"), ("CARGO_BUILD_JOBS", "12")];
+        assert_eq!(par(None, 64, &vars).unwrap(), p(3, 4));
+        assert_eq!(par(Some(2), 64, &vars).unwrap(), p(2, 6));
+    }
+
+    #[test]
+    fn more_jobs_than_the_share_leave_one_thread_each() {
+        assert_eq!(par(Some(8), 4, &[]).unwrap(), p(8, 1));
+    }
+
+    #[test]
+    fn a_bad_jobs_variable_is_a_usage_error() {
+        for v in ["0", "x", ""] {
+            let e = par(None, 8, &[("CARGO_SCHEMATA_JOBS", v)]).unwrap_err();
+            assert!(e.downcast_ref::<crate::options::Usage>().is_some(), "{v}");
+        }
+        // The option wins, so the variable is not even read as an error.
+        assert!(par(Some(1), 8, &[("CARGO_SCHEMATA_JOBS", "x")]).is_ok());
+    }
+
+    #[test]
+    fn test_processes_get_the_thread_count() {
+        let s = Scratch::new("threads");
+        let (bin, args) = sh("test \"$RUST_TEST_THREADS\" = 3");
+        let run = |n| {
+            Tests {
+                bin_args: &args,
+                tmp_root: &s.0,
+                early_kill: false,
+                test_threads: n,
+            }
+            .run(std::slice::from_ref(&bin), None, "j", None)
+            .unwrap()
+            .0
+        };
+        assert_eq!(run(Some(3)), Ran::Missed);
+        assert_eq!(run(Some(2)), Ran::Caught);
     }
 
     fn sh(script: &str) -> (TestBinary, Vec<String>) {
@@ -522,6 +677,7 @@ mod tests {
             bin_args: &args,
             tmp_root: &s.0,
             early_kill: false,
+            test_threads: None,
         };
         // The second run would see the first run's file without the clearing.
         assert_eq!(
@@ -541,6 +697,7 @@ mod tests {
             bin_args: &args,
             tmp_root: &s.0,
             early_kill: false,
+            test_threads: None,
         };
         tests.run(&[bin], mutant, "0", limit).unwrap()
     }
@@ -588,6 +745,7 @@ mod tests {
                 bin_args: &args,
                 tmp_root: &s.0.join("tmp"),
                 early_kill: false,
+                test_threads: None,
             };
             let (ran, _) = tests.run(&[bin], Some(1), "0", limit).unwrap();
             assert_eq!(
@@ -625,6 +783,7 @@ mod tests {
                 bin_args: &args,
                 tmp_root: &s.0,
                 early_kill,
+                test_threads: None,
             };
             tests.run(&[bin], Some(1), "0", Some(secs(20))).unwrap()
         };
@@ -664,6 +823,7 @@ mod tests {
             bin_args: &args,
             tmp_root: &s.0.join("tmp"),
             early_kill: false,
+            test_threads: None,
         };
         let (ran, _) = tests
             .run(&[role("first"), role("second")], None, "0", None)
@@ -685,6 +845,7 @@ mod tests {
             bin_args: &args,
             tmp_root: &s.0,
             early_kill: false,
+            test_threads: None,
         };
         match tests.baseline(&[bin], None, None).unwrap() {
             Baseline::Failed { log_tail, binary } => {
@@ -698,6 +859,7 @@ mod tests {
             bin_args: &args,
             tmp_root: &s.0,
             early_kill: false,
+            test_threads: None,
         };
         assert!(matches!(
             tests.baseline(&[bin], None, None).unwrap(),
@@ -716,6 +878,7 @@ mod tests {
             bin_args: &args,
             tmp_root: &s.0.join("tmp"),
             early_kill: false,
+            test_threads: None,
         };
         let seen = Mutex::new(Vec::new());
         let reruns = AtomicUsize::new(0);
@@ -770,6 +933,7 @@ mod tests {
             bin_args: &args,
             tmp_root: &s.0.join("tmp"),
             early_kill: true,
+            test_threads: None,
         };
         let pool = Pool {
             jobs: 2,
@@ -811,6 +975,7 @@ mod tests {
             bin_args: &args,
             tmp_root: &s.0.join("tmp"),
             early_kill: false,
+            test_threads: None,
         };
         let step = |bin| Step { bin, args: None };
         let limit = Some(secs(1));

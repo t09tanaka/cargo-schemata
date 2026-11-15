@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **The default number of jobs and the test threads follow the share of the
+  machine a run is given.** `--jobs` defaulted to a quarter of the processors
+  whatever a CI runner had set, and every test process used all of them, so
+  several shards on one machine each used every core and their baselines hit
+  `--timeout`. Without `--jobs` the jobs now come from `CARGO_SCHEMATA_JOBS`,
+  else from a quarter of the first of `NEXTEST_TEST_THREADS`,
+  `RUST_TEST_THREADS`, `CARGO_BUILD_JOBS` that holds a positive integer, else of
+  the processors (at least 1, at most 4). Every test process, the baseline
+  included, gets `RUST_TEST_THREADS` = share / jobs (at least 1; a
+  `--test-threads` after `--` wins), so jobs x threads stays within the share.
+  Without any variable the jobs are as before, but the tests of each process now
+  use a share of the processors instead of all of them, so a baseline can take
+  longer, and the limit derived from it with it. An invalid
+  `CARGO_SCHEMATA_JOBS` exits with 2.
+
 ## 0.4.0 - 2026-11-11
 
 - **A routed mutant starts its quickest test binary first.** A mutant that is
