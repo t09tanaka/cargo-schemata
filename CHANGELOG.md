@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-11-15
 
 - **The default number of jobs and the test threads follow the share of the
   machine a run is given.** `--jobs` defaulted to a quarter of the processors
