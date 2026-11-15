@@ -73,8 +73,11 @@ struct Args {
     )]
     output: Utf8PathBuf,
 
-    /// Run this many test processes at a time. Default: a quarter of the
-    /// processors, at least 1 and at most 4.
+    /// Run this many test processes at a time. Default: `CARGO_SCHEMATA_JOBS`,
+    /// else a quarter of the threads this run may use (`RUST_TEST_THREADS`
+    /// or `NEXTEST_TEST_THREADS`, else the processors), at least 1 and at most
+    /// 4. Each process gets `RUST_TEST_THREADS` = those threads / jobs, or the
+    /// `--test-threads` after `--` (then the jobs are those threads / that).
     #[arg(long, short = 'j', value_parser = clap::value_parser!(u32).range(1..), help_heading = "Execution")]
     jobs: Option<u32>,
 
@@ -534,6 +537,21 @@ fn run_tests(args: &Args) -> Result<i32> {
     if mutants.is_empty() {
         say("no mutants to run".to_owned());
     } else {
+        // A bad `CARGO_SCHEMATA_JOBS` fails before the build.
+        // Every test process, the baseline included, gets the same number of
+        // threads, so the baseline time a mutant's limit is derived from is
+        // that of a run under the same conditions as the mutants' runs.
+        let par = exec::parallelism_from_env(
+            args.jobs.map(|j| j as usize),
+            exec::user_test_threads(&split_test_args(&args.test_args).binary),
+        )?;
+        let jobs = par.jobs;
+        if par.over_share {
+            eprintln!(
+                "cargo schemata: warning: {jobs} job(s) x {} test thread(s) is more than the {} thread(s) this run may use",
+                par.test_threads, par.share
+            );
+        }
         let t = Instant::now();
         let mut prepared = prepare::prepare(&workspace, &packages, &mutants, &build_options(args))
             .context("failed to build mutants")?;
@@ -555,6 +573,7 @@ fn run_tests(args: &Args) -> Result<i32> {
             bin_args: &bin_args,
             tmp_root: &tmp_root,
             early_kill: route_ok && !route::changes_output(&bin_args),
+            test_threads: Some(par.test_threads),
         };
         let trace_file = tmp_root.join("trace-baseline.txt");
         let t = Instant::now();
@@ -582,12 +601,12 @@ fn run_tests(args: &Args) -> Result<i32> {
                 return Ok(1);
             }
         };
-        let jobs = args.jobs.map_or_else(exec::default_jobs, |j| j as usize);
         let timeout = exec::mutant_timeout(baseline, explicit);
         say(format!(
-            "baseline: tests pass in {:.1}s; a mutant gets {}s; {jobs} job(s) ({:.1}s)",
+            "baseline: tests pass in {:.1}s; a mutant gets {}s; {jobs} job(s) of {} test thread(s) ({:.1}s)",
             baseline.as_secs_f64(),
             timeout.as_secs(),
+            par.test_threads,
             t.elapsed().as_secs_f64()
         ));
         let routing = if route_ok && libtest.iter().any(|&l| l) {
