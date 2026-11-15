@@ -364,18 +364,22 @@ the old behaviour (every test, no early end):
 ### Jobs and threads
 
 The threads this run may use (its *share*) are the first positive integer in
-`NEXTEST_TEST_THREADS`, `RUST_TEST_THREADS`, `CARGO_BUILD_JOBS`, else the number
-of processors. A runner that starts several `cargo schemata` processes (shards)
-on one machine sets one of them for each, so that they do not all use every
-core. Values that are no positive integer (`NEXTEST_TEST_THREADS=num-cpus`) are
-skipped.
+`RUST_TEST_THREADS`, `NEXTEST_TEST_THREADS`, else the number of processors
+(`CARGO_BUILD_JOBS` is a build knob and is not read). A runner that starts
+several `cargo schemata` processes (shards) on one machine sets one of them for
+each, so that they do not all use every core. Values that are no positive
+integer (`NEXTEST_TEST_THREADS=num-cpus`) are skipped.
 
-The jobs are `--jobs`, else `CARGO_SCHEMATA_JOBS` (a positive integer, or exit
-code 2), else a quarter of the share, at least 1 and at most 4. Every test
-process, the baseline included, is started with `RUST_TEST_THREADS` = share /
-jobs (at least 1), so jobs x threads stays within the share; a `--test-threads`
-after the second `--` wins. The baseline runs with the same thread count as the
-mutants, so the limit derived from it (see below) is that of the same
+The jobs are `--jobs`, else `CARGO_SCHEMATA_JOBS` (a positive integer; empty
+counts as unset; anything else exits with 2), else a quarter of the share, at
+least 1 and at most 4. Every test process, the baseline included, is started
+with `RUST_TEST_THREADS` = share / jobs (at least 1), so jobs x threads stays
+within the share. A `--test-threads N` after the second `--` is used instead:
+every process gets N threads, and without `--jobs` and `CARGO_SCHEMATA_JOBS`
+the jobs are share / N (at least 1, at most 4). When `--jobs` or
+`CARGO_SCHEMATA_JOBS` makes jobs x threads more than the share, a warning is
+printed and the run goes on. The baseline runs with the same thread count as
+the mutants, so the limit derived from it (see below) is that of the same
 conditions; nothing is skipped and no limit is raised for it.
 
 ### Time limits
