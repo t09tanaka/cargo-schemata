@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
 use crate::mutant::Mutant;
+use crate::rewrite::{Placement, placement};
 use crate::shard::Sharding;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -124,6 +125,7 @@ pub fn report_json(
     shard: Option<(usize, usize, Sharding)>,
 ) -> Value {
     let mut order: Vec<String> = Vec::new();
+    let mut alone: Vec<String> = Vec::new();
     let by_id: BTreeMap<usize, &MutantResult> = results.iter().map(|r| (r.id, r)).collect();
     let mut files: BTreeMap<String, (String, Vec<Value>)> = BTreeMap::new();
     for m in mutants {
@@ -149,6 +151,9 @@ pub fn report_json(
         });
         let reason = r.and_then(|r| r.reason.clone());
         order.push(v["id"].as_str().unwrap_or_default().to_owned());
+        if placement(m) == Placement::Single {
+            alone.push(v["id"].as_str().unwrap_or_default().to_owned());
+        }
         if let Some(reason) = reason {
             v["statusReason"] = Value::String(reason);
         }
@@ -172,6 +177,7 @@ pub fn report_json(
     if let Some((k, n, sharding)) = shard {
         report["config"] = json!({"shard": {
             "index": k, "count": n, "sharding": sharding.name(), "order": order,
+            "alone": alone,
         }});
     }
     report

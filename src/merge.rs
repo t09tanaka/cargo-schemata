@@ -1,7 +1,7 @@
 //! `cargo schemata merge`: the reports of the parts of a run divided with
 //! `--shard` become the report of the whole run.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -9,7 +9,7 @@ use camino::Utf8PathBuf;
 use serde_json::Value;
 
 use crate::results::{self, OUTPUT_FILES};
-use crate::shard::{Shard, Sharding};
+use crate::shard::Sharding;
 
 /// One part: where it was read from, which part it is, and the report.
 struct Part {
@@ -18,7 +18,21 @@ struct Part {
     count: usize,
     sharding: Sharding,
     order: Vec<String>,
+    /// The mutants of `order` that are built one at a time (`config.shard.alone`).
+    alone: BTreeSet<String>,
     report: Value,
+}
+
+impl Part {
+    /// The part that each mutant of `order` belongs to.
+    fn owners(&self) -> Vec<usize> {
+        let alone: Vec<bool> = self
+            .order
+            .iter()
+            .map(|id| self.alone.contains(id))
+            .collect();
+        self.sharding.owners(self.count, &alone)
+    }
 }
 
 /// Fields of a mutant that depend on the part that evaluated it.
@@ -51,16 +65,30 @@ fn read_part(path: &Utf8PathBuf) -> Result<Part, String> {
         .iter()
         .map(|v| v.as_str().map(str::to_owned))
         .collect();
+    // reports before 0.6.0 have none, and only `balanced` needs it
+    let alone: Option<BTreeSet<String>> = match &shard["alone"] {
+        Value::Null if sharding != Sharding::Balanced => Some(BTreeSet::new()),
+        Value::Array(ids) => ids.iter().map(|v| v.as_str().map(str::to_owned)).collect(),
+        _ => None,
+    };
     let (index, count) = (index as usize, count as usize);
-    match order {
-        Some(order) if count > 0 && index < count && report["files"].is_object() => Ok(Part {
-            path: path.to_string(),
-            index,
-            count,
-            sharding,
-            order,
-            report,
-        }),
+    match (order, alone) {
+        (Some(order), Some(alone))
+            if count > 0
+                && index < count
+                && report["files"].is_object()
+                && alone.iter().all(|id| order.contains(id)) =>
+        {
+            Ok(Part {
+                path: path.to_string(),
+                index,
+                count,
+                sharding,
+                order,
+                alone,
+                report,
+            })
+        }
         _ => Err(format!(
             "{path}: not the report of a part (`config.shard` is wrong)"
         )),
@@ -154,7 +182,7 @@ fn problems(parts: &[Part]) -> Vec<String> {
     }
     let want = skeleton(&first.report);
     for p in &parts[1..] {
-        if p.order != first.order || skeleton(&p.report) != want {
+        if p.order != first.order || p.alone != first.alone || skeleton(&p.report) != want {
             out.push(format!(
                 "{} is not from the same run as {}: the mutants differ",
                 p.path, first.path
@@ -173,16 +201,13 @@ fn problems(parts: &[Part]) -> Vec<String> {
         ));
         return out;
     }
+    let owners = first.owners();
     for p in parts {
-        let shard = Shard {
-            k: p.index,
-            n: count,
-        };
         for (pos, id) in first.order.iter().enumerate() {
             let (path, i) = &at[id];
             let m = &p.report["files"][path]["mutants"][*i];
             let pending = status_of(m) == "Pending";
-            if first.sharding.owns(shard, pos, first.order.len()) == pending {
+            if (owners[pos] == p.index) == pending {
                 out.push(format!(
                     "{}: {id} is {} in part {}/{count}",
                     p.path,
@@ -233,7 +258,7 @@ pub fn merge(paths: &[Utf8PathBuf], out_dir: &Path, json: bool) -> Result<i32> {
     }
 
     let first = &parts[0];
-    let total = first.order.len();
+    let owners = first.owners();
     let at = locate(&first.report);
     let by_index: BTreeMap<usize, &Part> = parts.iter().map(|p| (p.index, p)).collect();
     let mut merged = first.report.clone();
@@ -241,7 +266,7 @@ pub fn merge(paths: &[Utf8PathBuf], out_dir: &Path, json: bool) -> Result<i32> {
     let mut lists: BTreeMap<&str, String> = BTreeMap::new();
     let mut counts = [0usize; 4];
     for (pos, id) in first.order.iter().enumerate() {
-        let owner = first.sharding.owner(first.count, pos, total);
+        let owner = owners[pos];
         let (path, i) = &at[id];
         let m = by_index[&owner].report["files"][path]["mutants"][*i].clone();
         let (file, word) = match status_of(&m) {

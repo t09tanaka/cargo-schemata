@@ -142,18 +142,32 @@ fn all_parts_merged_are_the_whole_run() {
         assert_eq!(mutants(&part).len(), total, "{shard}");
         let all = mutants(&part);
         let own: Vec<&&Value> = all.iter().filter(|m| m["status"] != "Pending").collect();
-        // round-robin is the default: mutant i goes to part i mod n
-        let dealt: Vec<&str> = (k..total)
-            .step_by(n)
-            .map(|i| part["config"]["shard"]["order"][i].as_str().unwrap())
+        // balanced is the default: the mutants built alone (the const fns) are
+        // dealt out in turn first, and the others continue the turn
+        let order = strings(&part["config"]["shard"]["order"]);
+        let alone = strings(&part["config"]["shard"]["alone"]);
+        assert!(alone.len() >= 2, "{alone:?}");
+        assert!(alone.iter().all(|id| order.contains(id)), "{alone:?}");
+        let (heavy, light): (Vec<&str>, Vec<&str>) = order
+            .iter()
+            .map(String::as_str)
+            .partition(|id| alone.iter().any(|a| a == id));
+        let dealt: Vec<&str> = heavy
+            .iter()
+            .chain(&light)
+            .enumerate()
+            .filter(|(i, _)| i % n == k)
+            .map(|(_, id)| *id)
             .collect();
+        let own_heavy = heavy.iter().enumerate().filter(|(i, _)| i % n == k).count();
+        assert_eq!(own_heavy, (heavy.len() + n - 1 - k) / n, "{shard}");
         // the report groups the mutants by file, `order` is the order of the list
         let mut own_ids: Vec<&str> = own.iter().map(|m| m["id"].as_str().unwrap()).collect();
         own_ids.sort_unstable();
         let mut dealt = dealt;
         dealt.sort_unstable();
         assert_eq!(own_ids, dealt, "{shard}");
-        assert_eq!(part["config"]["shard"]["sharding"], "round-robin");
+        assert_eq!(part["config"]["shard"]["sharding"], "balanced");
         assert_eq!(part["config"]["shard"]["index"], k);
         assert_eq!(part["config"]["shard"]["count"], n);
         assert_eq!(
@@ -211,6 +225,15 @@ fn all_parts_merged_are_the_whole_run() {
     assert_eq!(serde_json::from_str::<Value>(&stdout).unwrap(), merged);
 }
 
+/// The strings of a JSON array.
+fn strings(v: &Value) -> Vec<String> {
+    v.as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s.as_str().unwrap().to_owned())
+        .collect()
+}
+
 /// The ids of the mutants a part evaluated.
 fn evaluated(report: &Value) -> Vec<String> {
     mutants(report)
@@ -236,7 +259,7 @@ fn slice_parts_merge_too_and_the_two_modes_are_not_mixed() {
     }
     let (code, err) = kit.run("r1", &["--shard", "1/2", "--sharding", "round-robin"]);
     assert!(code <= 1, "{err}");
-    let (code, err) = kit.run("r0", &["--shard", "0/2"]);
+    let (code, err) = kit.run("r0", &["--shard", "0/2", "--sharding", "round-robin"]);
     assert!(code <= 1, "{err}");
 
     // slice: consecutive halves of the list
@@ -255,7 +278,7 @@ fn slice_parts_merge_too_and_the_two_modes_are_not_mixed() {
     };
     assert_eq!(sorted(evaluated(&s0)), sorted(order[..half].to_vec()));
     assert_eq!(sorted(evaluated(&s1)), sorted(order[half..].to_vec()));
-    // round-robin is what a part gets without --sharding, and differs from a slice
+    // round-robin differs from a slice
     assert_eq!(
         kit.report("r1")["config"]["shard"]["sharding"],
         "round-robin"
@@ -417,6 +440,29 @@ fn parts_that_are_not_all_the_parts_of_one_run_are_refused() {
         "greedy",
         &[p0.clone(), kit.out("greedy.json")],
         "evaluated but belongs to another part",
+    );
+
+    // a balanced part whose mutants built alone are not those of the others,
+    // or that does not say which they are
+    let mut moved: Value = serde_json::from_slice(&std::fs::read(&p1).unwrap()).unwrap();
+    let alone = moved["config"]["shard"]["alone"].as_array_mut().unwrap();
+    assert!(!alone.is_empty());
+    alone.pop();
+    std::fs::write(kit.out("moved.json"), moved.to_string()).unwrap();
+    refused(
+        "moved",
+        &[p0.clone(), kit.out("moved.json")],
+        "the mutants differ",
+    );
+    moved["config"]["shard"]
+        .as_object_mut()
+        .unwrap()
+        .remove("alone");
+    std::fs::write(kit.out("unsaid.json"), moved.to_string()).unwrap();
+    refused(
+        "unsaid",
+        &[p0.clone(), kit.out("unsaid.json")],
+        "not the report of a part",
     );
 
     // and the right parts still merge

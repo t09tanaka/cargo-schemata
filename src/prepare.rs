@@ -18,7 +18,9 @@ use serde::Serialize;
 use crate::diag::{Diag, ErrSig, parse_messages};
 use crate::mutant::Mutant;
 use crate::proc::{Sink, run_group};
-use crate::rewrite::{FilePlan, Placement, Rendered, apply_single, placement, runtime_module};
+use crate::rewrite::{
+    FilePlan, Placement, Rendered, apply_single, arms_of_match, placement, runtime_module,
+};
 use crate::sync::{Overrides, sync_tree, write_if_changed};
 use crate::workspace::{Package, Workspace};
 
@@ -249,19 +251,43 @@ impl Embedded<'_> {
         Ok((self.cargo.run(phase)?, rendered))
     }
 
+    /// The rendered text of the file that a diagnostic names.
+    fn rendered_of<'r>(
+        &self,
+        rendered: &'r BTreeMap<PathBuf, Rendered>,
+        file: &str,
+    ) -> Option<&'r Rendered> {
+        let p = Path::new(file);
+        let p = p.strip_prefix(self.work).unwrap_or(p);
+        rendered.get(p.strip_prefix("./").unwrap_or(p))
+    }
+
     fn map_error(
         &self,
         rendered: &BTreeMap<PathBuf, Rendered>,
         active: &BTreeSet<usize>,
         d: &Diag,
     ) -> Mapped {
+        if d.code.as_deref() == Some("E0004") {
+            // A deleted arm leaves its `match` non-exhaustive: the culprit is
+            // one of the deleted arms of the `match` the error points at.
+            let arms: BTreeSet<usize> = d
+                .spans
+                .iter()
+                .filter_map(|(file, range)| arms_of_match(self.rendered_of(rendered, file)?, range))
+                .flatten()
+                .filter(|id| active.contains(id))
+                .collect();
+            if !arms.is_empty() {
+                return Mapped::Candidates(arms.into_iter().collect());
+            }
+        }
         let mut ids = BTreeSet::new();
         let mut group_ids: BTreeSet<usize> = BTreeSet::new();
         for (file, range) in &d.spans {
-            let p = Path::new(file);
-            let p = p.strip_prefix(self.work).unwrap_or(p);
-            let p = p.strip_prefix("./").unwrap_or(p);
-            let Some(r) = rendered.get(p) else { continue };
+            let Some(r) = self.rendered_of(rendered, file) else {
+                continue;
+            };
             let inside = |outer: &std::ops::Range<usize>| {
                 outer.start <= range.start && range.end <= outer.end
             };

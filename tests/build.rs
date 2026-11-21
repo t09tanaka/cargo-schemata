@@ -161,8 +161,22 @@ fn mutants_are_classified_and_embedded_ones_take_effect() {
     let total = r["embedded"].as_array().unwrap().len()
         + r["single"].as_array().unwrap().len()
         + r["unviable"].as_array().unwrap().len();
-    assert_eq!(total, 64);
+    assert_eq!(total, 71);
     assert!(!r["stats"]["budget_exhausted"].as_bool().unwrap());
+
+    // the deleted arms that leave their match non-exhaustive are found among
+    // the arms of that match, not among every deleted arm of the package
+    find(r, "embedded", "delete match arm Some(0) in first");
+    for arm in ["Some(x)", "None"] {
+        let u = find(r, "unviable", &format!("delete match arm {arm} in first"));
+        assert!(u["reason"].as_str().unwrap().starts_with("E0004"), "{u}");
+    }
+    // 12 when the candidates were all the deleted arms
+    assert!(
+        r["stats"]["probe_runs"].as_u64().unwrap() <= 10,
+        "{}",
+        r["stats"]
+    );
 
     // the embedded binaries: nothing selected passes, the selected mutant is caught
     let bins = &r["test_binaries"];
