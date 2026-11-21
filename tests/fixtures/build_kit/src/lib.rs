@@ -79,6 +79,17 @@ pub fn name(n: u8) -> &'static str {
     }
 }
 
+/// The only `_` has a guard: deleting `Some(x)` or `None` leaves the match
+/// non-exhaustive, deleting `Some(0)` does not.
+pub fn first(o: Option<u8>, skip: bool) -> u8 {
+    match o {
+        Some(0) => 0,
+        _ if skip => 1,
+        Some(x) => x,
+        None => 9,
+    }
+}
+
 pub fn classify(n: i32) -> &'static str {
     match n {
         x if x < 0 => "neg",

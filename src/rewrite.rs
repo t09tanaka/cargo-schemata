@@ -105,6 +105,9 @@ pub fn placement(m: &Mutant) -> Placement {
     }
 }
 
+/// What is inserted after the pattern of an arm that a mutant deletes, before its id.
+const ARM_GUARD: &str = " if !crate::__schemata::on(";
+
 /// Where the code of one mutant is in the rendered text.
 #[derive(Clone, Debug)]
 pub struct Branch {
@@ -193,7 +196,7 @@ impl FilePlan {
                     Some(off) => inserts.push(Insert {
                         pos: t.start + off,
                         id,
-                        text: format!(" if !crate::__schemata::on({id})"),
+                        text: format!("{ARM_GUARD}{id})"),
                         is_arm: true,
                     }),
                     None => rejected.push((id, "cannot locate match arm pattern".into())),
@@ -398,6 +401,57 @@ fn arm_pattern_end(arm_text: &str) -> Option<usize> {
     }))
 }
 
+/// The arm-deletion mutants of the `match` whose scrutinee holds `span`, a byte
+/// range of the rendered text: the ids of the branches inserted right after the
+/// patterns of its own arms (not of a `match` nested in them). rustc reports a
+/// non-exhaustive `match` (E0004) at the scrutinee. `None` when the text does
+/// not parse or no scrutinee holds `span`.
+pub fn arms_of_match(r: &Rendered, span: &Range<usize>) -> Option<Vec<usize>> {
+    struct Find<'a> {
+        index: LineIndex<'a>,
+        span: &'a Range<usize>,
+        /// The smallest scrutinee holding `span`, and the ends of its arm patterns.
+        best: Option<(usize, Vec<usize>)>,
+    }
+    impl<'ast> syn::visit::Visit<'ast> for Find<'_> {
+        fn visit_expr_match(&mut self, i: &'ast syn::ExprMatch) {
+            let scrutinee = self.index.range(i.expr.span().into());
+            if scrutinee.start <= self.span.start
+                && self.span.end <= scrutinee.end
+                && self
+                    .best
+                    .as_ref()
+                    .is_none_or(|(len, _)| scrutinee.len() < *len)
+            {
+                let ends = i
+                    .arms
+                    .iter()
+                    .map(|a| self.index.range(a.pat.span().into()).end)
+                    .collect();
+                self.best = Some((scrutinee.len(), ends));
+            }
+            syn::visit::visit_expr_match(self, i);
+        }
+    }
+    let file = syn::parse_file(&r.text).ok()?;
+    let mut find = Find {
+        index: LineIndex::new(&r.text),
+        span,
+        best: None,
+    };
+    syn::visit::Visit::visit_file(&mut find, &file);
+    let (_, ends) = find.best?;
+    Some(
+        r.branches
+            .iter()
+            .filter(|b| {
+                ends.contains(&b.range.start) && r.text[b.range.clone()].starts_with(ARM_GUARD)
+            })
+            .map(|b| b.id)
+            .collect(),
+    )
+}
+
 /// Replace `edit` in `original` with `replacement`: the text of one mutant
 /// applied to an otherwise untouched file.
 pub fn apply_single(original: &str, m: &Mutant) -> String {
@@ -472,6 +526,70 @@ mod tests {
             m.id = i;
         }
         mutants
+    }
+
+    #[test]
+    fn a_non_exhaustive_match_is_traced_to_the_deleted_arms_of_that_match() {
+        // `_` has a guard, so deleting another arm can leave the match non-exhaustive
+        let code = "\
+enum E { A, B(u8), C }
+fn f(e: E, o: Option<u8>, g: bool) -> u8 {
+    match e {
+        E::A => 1,
+        _ if g => 2,
+        E::B(x) => match o {
+            Some(1) => x,
+            _ => 0,
+        },
+        E::C => 3,
+    }
+}
+fn h(o: Option<u8>) -> u8 {
+    match o {
+        Some(2) => 2,
+        _ => 0,
+    }
+}
+";
+        let ms: Vec<Mutant> = all_mutants(code)
+            .into_iter()
+            .filter(|m| m.genre == Genre::MatchArm)
+            .collect();
+        let id = |pat: &str, line: usize| {
+            ms.iter()
+                .find(|m| m.short_replaced.as_deref() == Some(pat) && m.span.start.line == line)
+                .unwrap_or_else(|| panic!("no arm {pat} on line {line}"))
+                .id
+        };
+        let (a, b, c) = (id("E::A", 4), id("E::B(x)", 6), id("E::C", 10));
+        let (inner, other) = (id("Some(1)", 7), id("Some(2)", 15));
+        let refs: Vec<&Mutant> = ms.iter().collect();
+        let (plan, rejected) = FilePlan::new(code, &refs);
+        assert!(rejected.is_empty(), "{rejected:?}");
+        let all: BTreeSet<usize> = ms.iter().map(|m| m.id).collect();
+        let r = plan.render(&all);
+        let at = |needle: &str| {
+            let start = r.text.find(needle).unwrap();
+            start..start + needle.len()
+        };
+        // rustc points E0004 at the scrutinee
+        let scrutinee = |name: &str| {
+            let m = at(&format!("match {name} {{"));
+            m.start + 6..m.start + 6 + name.len()
+        };
+        assert_eq!(arms_of_match(&r, &scrutinee("e")), Some(vec![a, b, c]));
+        assert_eq!(arms_of_match(&r, &scrutinee("o")), Some(vec![inner]));
+        // only the arms that are embedded now
+        let r2 = plan.render(&BTreeSet::from([a, c, other]));
+        let at2 = r2.text.find("match e {").unwrap() + 6;
+        assert_eq!(arms_of_match(&r2, &(at2..at2 + 1)), Some(vec![a, c]));
+        // not a scrutinee, or text that does not parse
+        assert_eq!(arms_of_match(&r, &at("fn h")), None);
+        let broken = Rendered {
+            text: "fn (".into(),
+            ..Rendered::default()
+        };
+        assert_eq!(arms_of_match(&broken, &(0..1)), None);
     }
 
     #[test]

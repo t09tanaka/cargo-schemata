@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+- **`--sharding balanced`, and `balanced` is the new default.** The mutants
+  that cannot be switched (const contexts, deleted struct fields and the like)
+  are each built on their own, one after the other, and those builds were most
+  of the time of a part: in one crate of about 3300 mutants in four parts,
+  `round-robin` gave two parts 7 of them and two parts 5, and those two parts
+  were the slow ones. `balanced` deals these mutants out in turn first, and the
+  others continue the turn, so every part gets as many of them (at most one
+  apart) and as many mutants in all. Which mutants these are follows from the
+  source, so all the parts agree.
+- **Changed behaviour:** without `--sharding`, a part gets other mutants than in
+  0.4.0 and 0.5.0. Use one version and one `--sharding` for all the parts of a
+  run, or pass `--sharding round-robin` to keep the old division.
+- `config.shard.alone` in the report of a part lists the mutants built on their
+  own. `cargo schemata merge` uses it for `balanced` parts, refuses a `balanced`
+  part without it, and refuses parts whose lists differ.
+- **A deleted match arm that leaves its `match` non-exhaustive is looked for
+  among the deleted arms of that `match`.** rustc reports E0004 at the
+  scrutinee, which is in no mutant, so the culprit was searched for among every
+  deleted arm of the package, with a `cargo check` for each halving. Now only
+  the deleted arms of the `match` whose scrutinee the error points at are
+  candidates. In the crate above, the shared build of the four parts ran
+  `cargo check` 9, 15, 3 and 8 times before, and 4, 6, 3 and 4 times with both
+  changes; the same mutants are unviable.
+
 ## 0.5.0 - 2026-11-15
 
 - **The default number of jobs and the test threads follow the share of the

@@ -7,6 +7,9 @@ use std::str::FromStr;
 
 use anyhow::{Context, Error, anyhow, ensure};
 
+use crate::mutant::Mutant;
+use crate::rewrite::{Placement, placement};
+
 /// One part of a run that is divided into `n` parts.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Shard {
@@ -28,18 +31,25 @@ impl FromStr for Shard {
     }
 }
 
-/// How the mutants are divided between the parts (`--sharding`, as in
-/// cargo-mutants).
+/// How the mutants are divided between the parts (`--sharding`).
 ///
-/// Both work on the list of mutants as `--list` shows it, after `--in-diff` and
-/// the other filters. That order is the same on every machine for the same source
-/// tree and options, so the parts of one run agree on who has which mutant.
+/// All work on the list of mutants as `--list` shows it, after `--in-diff` and
+/// the other filters, and on which of them are built one at a time (decided by
+/// the kind of mutant and where it is, see [`crate::rewrite::placement`]). Both
+/// are the same on every machine for the same source tree and options, so the
+/// parts of one run agree on who has which mutant.
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, clap::ValueEnum, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Sharding {
+    /// The mutants that are built one at a time are dealt out in turn first,
+    /// and the others continue the turn. Each of the first costs a build of the
+    /// package of its own, one after the other, so they decide how long a part
+    /// takes; this gives the parts as many of them as it can, and still as many
+    /// mutants in all (at most one apart).
+    #[default]
+    Balanced,
     /// Mutant `i` of the list goes to part `i mod n`. Slow mutants tend to sit
     /// together (in one file), and this spreads them over all the parts.
-    #[default]
     RoundRobin,
     /// Consecutive ranges: the first `ceil(total / n)` mutants to part 0, and so on.
     Slice,
@@ -49,6 +59,7 @@ impl Sharding {
     /// The name in `--sharding`, and in `config.shard.sharding` of a report.
     pub fn name(self) -> &'static str {
         match self {
+            Sharding::Balanced => "balanced",
             Sharding::RoundRobin => "round-robin",
             Sharding::Slice => "slice",
         }
@@ -59,31 +70,53 @@ impl Sharding {
         match name {
             None | Some("slice") => Some(Sharding::Slice),
             Some("round-robin") => Some(Sharding::RoundRobin),
+            Some("balanced") => Some(Sharding::Balanced),
             Some(_) => None,
         }
     }
 
-    /// Whether position `pos` in a list of `total` mutants belongs to `shard`.
-    pub fn owns(self, shard: Shard, pos: usize, total: usize) -> bool {
-        self.owner(shard.n, pos, total) == shard.k
-    }
-
-    /// The part that position `pos` in a list of `total` mutants belongs to.
-    pub fn owner(self, n: usize, pos: usize, total: usize) -> usize {
+    /// The part that each mutant of the list belongs to, out of `n` parts.
+    /// `alone[i]` says whether mutant `i` is built one at a time; only
+    /// `balanced` looks at it.
+    pub fn owners(self, n: usize, alone: &[bool]) -> Vec<usize> {
+        let total = alone.len();
         match self {
-            Sharding::RoundRobin => pos % n,
-            Sharding::Slice => pos / total.div_ceil(n),
+            Sharding::RoundRobin => (0..total).map(|pos| pos % n).collect(),
+            Sharding::Slice => (0..total).map(|pos| pos / total.div_ceil(n)).collect(),
+            Sharding::Balanced => {
+                // the others start where the deal of the ones built alone ended
+                let mut heavy = 0;
+                let mut light = alone.iter().filter(|&&a| a).count();
+                alone
+                    .iter()
+                    .map(|&a| {
+                        let turn = if a { &mut heavy } else { &mut light };
+                        *turn += 1;
+                        (*turn - 1) % n
+                    })
+                    .collect()
+            }
         }
     }
 
-    /// The mutants of `shard`, in list order.
-    pub fn select<T: Clone>(self, shard: Shard, all: &[T]) -> Vec<T> {
+    /// The mutants of `shard`, in list order. `alone` is as for [`Sharding::owners`].
+    pub fn select<T: Clone>(self, shard: Shard, all: &[T], alone: &[bool]) -> Vec<T> {
+        assert_eq!(all.len(), alone.len(), "one flag for each mutant");
         all.iter()
-            .enumerate()
-            .filter(|&(pos, _)| self.owns(shard, pos, all.len()))
-            .map(|(_, m)| m.clone())
+            .zip(self.owners(shard.n, alone))
+            .filter(|&(_, k)| k == shard.k)
+            .map(|(m, _)| m.clone())
             .collect()
     }
+}
+
+/// For each mutant of the list, whether it is built one at a time: what
+/// [`Sharding::owners`] takes.
+pub fn alone(mutants: &[Mutant]) -> Vec<bool> {
+    mutants
+        .iter()
+        .map(|m| placement(m) == Placement::Single)
+        .collect()
 }
 
 #[cfg(test)]
@@ -109,7 +142,7 @@ mod tests {
 
     fn part(mode: Sharding, k: usize, n: usize, total: usize) -> Vec<usize> {
         let all: Vec<usize> = (0..total).collect();
-        mode.select(Shard { k, n }, &all)
+        mode.select(Shard { k, n }, &all, &vec![false; total])
     }
 
     #[test]
@@ -126,7 +159,7 @@ mod tests {
         assert_eq!(part(0, 1), (0..10).collect::<Vec<_>>());
         assert!(
             Sharding::Slice
-                .select(Shard { k: 2, n: 3 }, &[0u8; 0])
+                .select(Shard { k: 2, n: 3 }, &[0u8; 0], &[])
                 .is_empty()
         );
     }
@@ -145,26 +178,89 @@ mod tests {
         assert_eq!(part(0, 1), (0..10).collect::<Vec<_>>());
         assert!(
             Sharding::RoundRobin
-                .select(Shard { k: 2, n: 3 }, &[0u8; 0])
+                .select(Shard { k: 2, n: 3 }, &[0u8; 0], &[])
                 .is_empty()
         );
     }
 
+    const MODES: [Sharding; 3] = [Sharding::Balanced, Sharding::RoundRobin, Sharding::Slice];
+
+    /// Which mutants of a list of `total` are built alone, from the bits of `mask`.
+    fn alone_of(mask: u32, total: usize) -> Vec<bool> {
+        (0..total).map(|i| mask >> (i % 32) & 1 == 1).collect()
+    }
+
     #[test]
-    fn every_mutant_has_exactly_one_part_in_both_modes() {
-        for mode in [Sharding::RoundRobin, Sharding::Slice] {
+    fn every_mutant_has_exactly_one_part_in_every_mode() {
+        for mode in MODES {
             for total in 0..30 {
-                for n in 1..35 {
-                    let mut seen = vec![0; total];
-                    for k in 0..n {
-                        for pos in part(mode, k, n, total) {
-                            seen[pos] += 1;
-                            assert_eq!(mode.owner(n, pos, total), k, "{mode:?} {total} {n}");
+                for mask in [0, u32::MAX, 0b1001_0110, 0x0f0f_0f0f] {
+                    let alone = alone_of(mask, total);
+                    for n in 1..35 {
+                        let owners = mode.owners(n, &alone);
+                        assert_eq!(owners.len(), total);
+                        let all: Vec<usize> = (0..total).collect();
+                        let mut seen = vec![0; total];
+                        for k in 0..n {
+                            for pos in mode.select(Shard { k, n }, &all, &alone) {
+                                seen[pos] += 1;
+                                assert_eq!(owners[pos], k, "{mode:?} {total} {n}");
+                            }
                         }
+                        assert!(seen.iter().all(|&c| c == 1), "{mode:?} total {total} n {n}");
                     }
-                    assert!(seen.iter().all(|&c| c == 1), "{mode:?} total {total} n {n}");
                 }
             }
+        }
+    }
+
+    #[test]
+    fn without_mutants_built_alone_balanced_is_round_robin() {
+        for total in 0..30 {
+            for n in 1..8 {
+                let alone = vec![false; total];
+                assert_eq!(
+                    Sharding::Balanced.owners(n, &alone),
+                    Sharding::RoundRobin.owners(n, &alone)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn balanced_deals_the_mutants_built_alone_first_and_the_others_after_them() {
+        // positions 1, 2, 5, 6 and 9 of 12 are built alone
+        let alone = alone_of(0b10_0110_0110, 12);
+        let owners = Sharding::Balanced.owners(4, &alone);
+        // alone: 1->0, 2->1, 5->2, 6->3, 9->0; the others go on from part 1
+        assert_eq!(owners, [1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 2, 3]);
+        let alone_in = |k| (0..12).filter(|&p| alone[p] && owners[p] == k).count();
+        assert_eq!((0..4).map(alone_in).collect::<Vec<_>>(), [2, 1, 1, 1]);
+        let size = |k| owners.iter().filter(|&&o| o == k).count();
+        assert_eq!((0..4).map(size).collect::<Vec<_>>(), [3, 3, 3, 3]);
+    }
+
+    #[test]
+    fn balanced_evens_out_what_round_robin_leaves_uneven() {
+        // every fourth mutant from position 1 and every fourth from 3 is built
+        // alone: round-robin gives all of them to parts 1 and 3
+        let alone: Vec<bool> = (0..40)
+            .map(|p| p % 2 == 1 && p % 4 != 1 || p % 8 == 1)
+            .collect();
+        let loads = |mode: Sharding| {
+            let owners = mode.owners(4, &alone);
+            (0..4)
+                .map(|k| (0..40).filter(|&p| alone[p] && owners[p] == k).count())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(loads(Sharding::RoundRobin), [0, 5, 0, 10]);
+        assert_eq!(loads(Sharding::Balanced), [4, 4, 4, 3]);
+        for mode in MODES {
+            let owners = mode.owners(4, &alone);
+            let sizes: Vec<usize> = (0..4)
+                .map(|k| owners.iter().filter(|&&o| o == k).count())
+                .collect();
+            assert_eq!(sizes, [10, 10, 10, 10], "{mode:?}");
         }
     }
 
@@ -179,8 +275,8 @@ mod tests {
 
     #[test]
     fn names() {
-        assert_eq!(Sharding::default(), Sharding::RoundRobin);
-        for m in [Sharding::RoundRobin, Sharding::Slice] {
+        assert_eq!(Sharding::default(), Sharding::Balanced);
+        for m in MODES {
             assert_eq!(Sharding::from_name(Some(m.name())), Some(m));
         }
         assert_eq!(Sharding::from_name(None), Some(Sharding::Slice));
