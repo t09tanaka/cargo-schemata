@@ -22,8 +22,8 @@
   scrutinee, which is in no mutant, so the culprit was searched for among every
   deleted arm of the package, with a `cargo check` for each halving. Now only
   the deleted arms of the `match` whose scrutinee the error points at are
-  candidates. In the crate above, the shared build of the four parts ran
-  `cargo check` 9, 15, 3 and 8 times before, and 4, 6, 3 and 4 times with both
+  candidates. In the crate above, the shared build of the four parts took 9,
+  15, 3 and 8 check and build runs before, and 4, 6, 3 and 4 with both
   changes; the same mutants are unviable.
 
 ## 0.5.0 - 2026-11-15
