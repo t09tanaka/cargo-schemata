@@ -215,6 +215,10 @@ struct Embedded<'a> {
 enum Mapped {
     Ids(BTreeSet<usize>),
     Candidates(Vec<usize>),
+    /// The deleted arms of one `match` that rustc calls non-exhaustive. The
+    /// message of such an error is the same for another `match` over the same
+    /// type, so only an error that points into this `match` is the same error.
+    Arms(Vec<usize>),
 }
 
 impl Embedded<'_> {
@@ -279,7 +283,7 @@ impl Embedded<'_> {
                 .filter(|id| active.contains(id))
                 .collect();
             if !arms.is_empty() {
-                return Mapped::Candidates(arms.into_iter().collect());
+                return Mapped::Arms(arms.into_iter().collect());
             }
         }
         let mut ids = BTreeSet::new();
@@ -327,13 +331,37 @@ impl Embedded<'_> {
         Mapped::Candidates(active.iter().copied().collect())
     }
 
+    /// Whether `run` still reports the error `sig`. With `scope` (the arms of
+    /// the `match` the error was first seen at), only an error that points
+    /// into that `match` counts, not the same message at another one.
+    fn reports(
+        &self,
+        run: &Run,
+        rendered: &BTreeMap<PathBuf, Rendered>,
+        sig: &ErrSig,
+        scope: Option<&BTreeSet<usize>>,
+    ) -> bool {
+        run.errors.iter().any(|e| {
+            &e.sig() == sig
+                && scope.is_none_or(|scope| {
+                    e.spans.iter().any(|(file, range)| {
+                        self.rendered_of(rendered, file)
+                            .and_then(|r| arms_of_match(r, range))
+                            .is_some_and(|arms| arms.iter().any(|id| scope.contains(id)))
+                    })
+                })
+        })
+    }
+
     /// Find the one mutant among `cands` that causes `sig`, by removing halves.
+    /// `scope` narrows what counts as the same error (see `reports`).
     /// Returns `None` when the run budget ends first.
     fn bisect(
         &mut self,
         active: &BTreeSet<usize>,
         mut cands: Vec<usize>,
         sig: &ErrSig,
+        scope: Option<&BTreeSet<usize>>,
         phase: Phase,
     ) -> Result<Option<usize>> {
         if cands.len() > 1 && cands.len() == active.len() {
@@ -358,8 +386,8 @@ impl Embedded<'_> {
                 .filter(|id| !cands.contains(id))
                 .collect();
             self.probes += 1;
-            let (run, _) = self.build(&without, phase)?;
-            if run.errors.iter().any(|e| &e.sig() == sig) {
+            let (run, rendered) = self.build(&without, phase)?;
+            if self.reports(&run, &rendered, sig, scope) {
                 // Still failing without the first half: the culprit is in `b`.
                 cands = b;
             }
@@ -503,7 +531,7 @@ pub fn prepare(
             );
         }
         let mut kill: BTreeMap<usize, ErrSig> = BTreeMap::new();
-        let mut pending: Option<(ErrSig, Vec<usize>)> = None;
+        let mut pending: Option<(ErrSig, Vec<usize>, Option<BTreeSet<usize>>)> = None;
         for d in &run.errors {
             match emb.map_error(&rendered, &active, d) {
                 Mapped::Ids(ids) => {
@@ -513,17 +541,23 @@ pub fn prepare(
                 }
                 Mapped::Candidates(c) => {
                     if pending.is_none() {
-                        pending = Some((d.sig(), c));
+                        pending = Some((d.sig(), c, None));
+                    }
+                }
+                Mapped::Arms(c) => {
+                    if pending.is_none() {
+                        let scope = c.iter().copied().collect();
+                        pending = Some((d.sig(), c, Some(scope)));
                     }
                 }
             }
         }
         if kill.is_empty() {
-            let (sig, cands) = pending.expect("an unmapped error");
+            let (sig, cands, scope) = pending.expect("an unmapped error");
             if cands.len() == 1 {
                 kill.insert(cands[0], sig);
             } else {
-                match emb.bisect(&active, cands, &sig, phase)? {
+                match emb.bisect(&active, cands, &sig, scope.as_ref(), phase)? {
                     Some(id) => {
                         kill.insert(id, sig);
                     }
