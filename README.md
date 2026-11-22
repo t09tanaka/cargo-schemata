@@ -227,7 +227,7 @@ Every target's root file gets a small module, `__schemata`, that reads
 
 `cargo check --tests` then finds the mutants that do not compile; their error spans are mapped to
 the mutant that produced them (bisecting when a span maps to none; a non-exhaustive `match`, which
-rustc reports at its scrutinee, among the deleted arms of that `match`), those mutants are taken out,
+rustc reports at its scrutinee, among the deleted arms of that `match`, and only an error pointing into it counts as the same error), those mutants are taken out,
 and the rest is built once with `cargo test --no-run`. Mutants whose failure may come from the
 switch itself (type mismatches and the like) and mutants that cannot be switched (const contexts,
 let-chain `&&`, deleted struct fields) are built one at a time in `<target dir>/schemata/single-work`.

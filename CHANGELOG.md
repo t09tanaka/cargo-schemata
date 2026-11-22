@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-11-22
 
 - **`--sharding balanced`, and `balanced` is the new default.** The mutants
   that cannot be switched (const contexts, deleted struct fields and the like)
@@ -25,6 +25,10 @@
   candidates. In the crate above, the shared build of the four parts took 9,
   15, 3 and 8 check and build runs before, and 4, 6, 3 and 4 with both
   changes; the same mutants are unviable.
+  Another `match` over the same type is worded the same by rustc, so while the
+  culprit is halved out, an error counts as the same one only when it points
+  into the `match` it was first seen at; a deleted arm that changes nothing is
+  no longer taken for the culprit because the other `match` keeps failing.
 
 ## 0.5.0 - 2026-11-15
 
