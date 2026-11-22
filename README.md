@@ -73,7 +73,7 @@ static initializers are listed like any other code.
 | `-E`, `--exclude-re <regex>` | Leave out mutants whose name matches                                                     |
 | `-D`, `--in-diff <file>`     | Only mutants on lines that the diff adds or changes (`-` reads standard input), see [Only the code a diff changes](#only-the-code-a-diff-changes---in-diff) |
 | `--shard <k>/<n>`            | Run part `k` of `n` (`k` from 0) of the mutants; the report is then a part, see [A run in several parts](#a-run-in-several-parts---shard-and-merge) |
-| `--sharding <method>`        | How `--shard` divides the mutants: `round-robin` (the default) or `slice`. Needs `--shard`; the same for every part |
+| `--sharding <method>`        | How `--shard` divides the mutants: `balanced` (the default), `round-robin` or `slice`. Needs `--shard`; the same for every part |
 | `-d`, `--dir <dir>`          | The crate or workspace directory. Default: `.`                                           |
 | `--manifest-path <file>`     | The `Cargo.toml` of the package, instead of `--dir`                                      |
 | `-p`, `--package <name>`     | Mutate only this package; may be repeated                                                |
@@ -95,7 +95,7 @@ The file is read like cargo-mutants does, and one file can serve both tools:
 | Key                                                                                    | In cargo-schemata                                                                  |
 | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | `examine_globs`, `exclude_globs`, `examine_re`, `exclude_re`, `skip_calls`, `skip_calls_defaults`, `error_values` | Used: added to the command line (lists are joined, the command line first) |
-| `sharding` | Used: `"round-robin"` or `"slice"`; `--sharding` wins |
+| `sharding` | Used: `"balanced"`, `"round-robin"` or `"slice"`; `--sharding` wins |
 | `additional_cargo_args`, `additional_cargo_test_args`, `all_features`, `build_timeout_multiplier`, `cap_lints`, `copy_vcs`, `copy_target`, `gitignore`, `features`, `minimum_test_timeout`, `no_default_features`, `output`, `profile`, `test_package`, `test_workspace`, `timeout_multiplier`, `test_tool` | Known to cargo-mutants 27.1.0 but not used: accepted, with a warning on stderr (`cargo schemata: warning: <file>: `timeout_multiplier` is not used by cargo-schemata`). Pass cargo arguments after `--`, and use `-j` and `--timeout` |
 | any other key                                                                          | Refused, as cargo-mutants does: exit code 2, and the message names the key         |
 
@@ -124,16 +124,17 @@ The file names in the diff are matched with the paths of the mutants, relative t
 
 ### A run in several parts (`--shard` and `merge`)
 
-`--shard <k>/<n>` runs part `k` of `n` (`k` from 0) of the mutants, so that `n` machines can each take one. After `--in-diff` and the other filters, the mutants are divided by `--sharding` (or `sharding` in `.cargo/mutants.toml`), with the names cargo-mutants uses:
+`--shard <k>/<n>` runs part `k` of `n` (`k` from 0) of the mutants, so that `n` machines can each take one. After `--in-diff` and the other filters, the mutants are divided by `--sharding` (or `sharding` in `.cargo/mutants.toml`):
 
-- `round-robin` (the default): mutant `i` of the list goes to part `i mod n`. Mutants that are slow tend to sit together (the mutants of one file test the same slow code), and this spreads them over all the parts, so the parts take about as long. In one crate of about 1000 mutants in four parts, the slowest slice took nearly twice as long as the fastest, and the slowest part sets the time of the whole run.
+- `balanced` (the default): the mutants that cannot be switched and are built one at a time (const contexts, deleted struct fields and the like, see [Building](#building---build-only)) are dealt out in turn first, and the other mutants continue the turn, in list order. Each of them costs a build of the package of its own, one after the other, and so decides how long a part takes much more than the test runs of the others do. The parts get as many of them as each other (at most one apart), and as many mutants in all. In one crate of about 3300 mutants in four parts, `round-robin` gave two parts 7 of them and two parts 5, and those two parts were the slow ones. Whether a mutant cannot be switched follows from the kind of mutant and where it is in the source, not from a build, so every part computes it the same way; a mutant that is built alone only because the shared build failed on it is not known in advance and goes where the turn puts it.
+- `round-robin`: mutant `i` of the list goes to part `i mod n`. Mutants that are slow tend to sit together (the mutants of one file test the same slow code), and this spreads them over all the parts, so the parts take about as long. In one crate of about 1000 mutants in four parts, the slowest slice took nearly twice as long as the fastest, and the slowest part sets the time of the whole run.
 - `slice`: consecutive ranges of the list, the first `ceil(total / n)` mutants to part 0 and so on (the last parts may be empty). This is the default of cargo-mutants.
 
 The list is the one `--list` prints, in a fixed order that does not depend on the machine, the job or the number of jobs (the packages by name, then each package's files in the order the walk from its top files finds them, and the mutants of a file in source order; nothing is hashed or read from a directory listing), so for the same source tree and options every part computes the same division. Every part builds all the mutants it has to run and runs the tests without a mutant first, so a part costs a baseline and a build; what is divided is the test runs on the mutants.
 
-**The default changed in 0.4.0** (it was `slice`). Parts made by 0.3.0 and by 0.4.0 are different divisions: give every job the same version and the same `--sharding`, or pass `--sharding slice` to get the old division back. `merge` refuses parts that were made with different values.
+**The default changed in 0.4.0** (it was `slice`) **and again in 0.6.0** (it was `round-robin`). Parts made by different versions are different divisions: give every job the same version and the same `--sharding`, or pass `--sharding round-robin` (0.4.0 and 0.5.0) or `--sharding slice` (0.3.0) to get an old division back. `merge` refuses parts that were made with different values.
 
-**The report of a part is not a result.** It lists every mutant of the run, and the mutants of the other parts have the status `Pending`. `config.shard` says which part it is (`index`, `count`, `sharding`, and the `order` of all mutants, which `merge` needs). A tool that judges a report must not pass a `Pending` mutant. The `*.txt` lists have the part's own mutants, the exit code is about them alone, and the last line says `shard k/n: 12 of 40 mutants`.
+**The report of a part is not a result.** It lists every mutant of the run, and the mutants of the other parts have the status `Pending`. `config.shard` says which part it is (`index`, `count`, `sharding`, the `order` of all mutants, and the ids of the mutants built `alone`, which `merge` needs). A tool that judges a report must not pass a `Pending` mutant. The `*.txt` lists have the part's own mutants, the exit code is about them alone, and the last line says `shard k/n: 12 of 40 mutants`.
 
 ```bash
 cargo schemata --shard 0/3 -o parts/0
@@ -225,7 +226,8 @@ Every target's root file gets a small module, `__schemata`, that reads
 - a deleted match arm: `Pattern if !on(N) => ...`.
 
 `cargo check --tests` then finds the mutants that do not compile; their error spans are mapped to
-the mutant that produced them (bisecting when a span maps to none), those mutants are taken out,
+the mutant that produced them (bisecting when a span maps to none; a non-exhaustive `match`, which
+rustc reports at its scrutinee, among the deleted arms of that `match`, and only an error pointing into it counts as the same error), those mutants are taken out,
 and the rest is built once with `cargo test --no-run`. Mutants whose failure may come from the
 switch itself (type mismatches and the like) and mutants that cannot be switched (const contexts,
 let-chain `&&`, deleted struct fields) are built one at a time in `<target dir>/schemata/single-work`.
@@ -461,7 +463,7 @@ killed leaves no stale lock.
 ### Differences from cargo-mutants
 
 Doctests are not run (only the test binaries `cargo test --no-run` builds).
-`--html` and reuse of earlier results are not there. The `--sharding` default is `round-robin`, not `slice` as in cargo-mutants (see [A run in several parts](#a-run-in-several-parts---shard-and-merge)). The
+`--html` and reuse of earlier results are not there. The `--sharding` default is `balanced`, which cargo-mutants does not have, not `slice` as in cargo-mutants (see [A run in several parts](#a-run-in-several-parts---shard-and-merge)). The
 test processes of the mutants that are built in share one working directory
 (see `-j`).
 

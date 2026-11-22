@@ -200,13 +200,41 @@ fn list_lines(args: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn shards_divide_the_list_by_round_robin_or_slice() {
+fn shards_divide_the_list_by_balanced_round_robin_or_slice() {
     let all = list_lines(&["--list"]);
     let n = 3;
     assert!(all.len() > 2 * n, "{}", all.len());
+    let parts_of = |extra: &[&str]| -> Vec<Vec<String>> {
+        (0..n)
+            .map(|k| {
+                let shard = format!("{k}/{n}");
+                let mut args = vec!["--list", "--shard", shard.as_str()];
+                args.extend(extra);
+                list_lines(&args)
+            })
+            .collect()
+    };
+    // balanced (the default; the deal itself is tested with the report, which
+    // says which mutants are built alone): parts of the list in its order, as
+    // large as each other, that together hold each mutant once
+    let balanced = parts_of(&[]);
+    assert_eq!(balanced, parts_of(&["--sharding", "balanced"]));
+    assert_ne!(balanced, parts_of(&["--sharding", "round-robin"]));
+    for part in &balanced {
+        assert!(part.len().abs_diff(all.len() / n) <= 1, "{}", part.len());
+        let at: Vec<usize> = part
+            .iter()
+            .map(|l| all.iter().position(|a| a == l).unwrap())
+            .collect();
+        assert!(at.is_sorted(), "{at:?}");
+    }
+    let mut joined: Vec<String> = balanced.concat();
+    joined.sort();
+    let mut sorted = all.clone();
+    sorted.sort();
+    assert_eq!(joined, sorted);
     for (mode, extra) in [
         ("round-robin", vec!["--sharding", "round-robin"]),
-        ("round-robin (default)", vec![]),
         ("slice", vec!["--sharding", "slice"]),
     ] {
         let parts: Vec<Vec<String>> = (0..n)

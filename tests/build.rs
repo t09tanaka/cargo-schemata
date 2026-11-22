@@ -56,9 +56,18 @@ fn build_only(dir: &Path) -> Value {
 }
 
 fn built() -> Built {
-    let dir = std::env::temp_dir().join(format!("schemata-b-test-{}", std::process::id()));
+    built_from("build_kit")
+}
+
+fn built_from(kit: &str) -> Built {
+    let dir = std::env::temp_dir().join(format!("schemata-b-{kit}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    copy_dir(&fixture(), &dir);
+    copy_dir(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(kit),
+        &dir,
+    );
     let report = build_only(&dir);
     Built { dir, report }
 }
@@ -161,8 +170,22 @@ fn mutants_are_classified_and_embedded_ones_take_effect() {
     let total = r["embedded"].as_array().unwrap().len()
         + r["single"].as_array().unwrap().len()
         + r["unviable"].as_array().unwrap().len();
-    assert_eq!(total, 64);
+    assert_eq!(total, 71);
     assert!(!r["stats"]["budget_exhausted"].as_bool().unwrap());
+
+    // the deleted arms that leave their match non-exhaustive are found among
+    // the arms of that match, not among every deleted arm of the package
+    find(r, "embedded", "delete match arm Some(0) in first");
+    for arm in ["Some(x)", "None"] {
+        let u = find(r, "unviable", &format!("delete match arm {arm} in first"));
+        assert!(u["reason"].as_str().unwrap().starts_with("E0004"), "{u}");
+    }
+    // 12 when the candidates were all the deleted arms
+    assert!(
+        r["stats"]["probe_runs"].as_u64().unwrap() <= 10,
+        "{}",
+        r["stats"]
+    );
 
     // the embedded binaries: nothing selected passes, the selected mutant is caught
     let bins = &r["test_binaries"];
@@ -209,4 +232,21 @@ fn mutants_are_classified_and_embedded_ones_take_effect() {
         };
         assert_eq!(ids(&again), ids(r), "{class}");
     }
+}
+
+#[test]
+fn an_error_of_another_match_does_not_pick_the_arm() {
+    // Both matches are over `Option<u8>`, so their E0004 read alike. Which arm
+    // is the culprit has to be found from the error of its own match: the other
+    // match keeps failing while the candidates of this one are taken away.
+    let b = built_from("twin_match_kit");
+    let r = &b.report;
+    for f in ["earlier", "later"] {
+        find(r, "embedded", &format!("delete match arm Some(0) in {f}"));
+        for arm in ["Some(x)", "None"] {
+            let u = find(r, "unviable", &format!("delete match arm {arm} in {f}"));
+            assert!(u["reason"].as_str().unwrap().starts_with("E0004"), "{u}");
+        }
+    }
+    assert!(!r["stats"]["budget_exhausted"].as_bool().unwrap());
 }

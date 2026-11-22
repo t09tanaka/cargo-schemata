@@ -135,10 +135,11 @@ struct Args {
     #[arg(long, value_name = "K/N", help_heading = "Filters")]
     shard: Option<Shard>,
 
-    /// How `--shard` divides the mutants: `round-robin` gives mutant `i` of the list
-    /// to part `i mod n` (the default; it spreads slow mutants that sit together),
-    /// `slice` gives consecutive ranges, the first `ceil(total / n)` to part 0. Every
-    /// part of a run needs the same value.
+    /// How `--shard` divides the mutants: `balanced` (the default) deals out the
+    /// mutants that are built one at a time first and the others after them, so the
+    /// parts get as many builds as each other; `round-robin` gives mutant `i` of the
+    /// list to part `i mod n`; `slice` gives consecutive ranges, the first
+    /// `ceil(total / n)` to part 0. Every part of a run needs the same value.
     #[arg(
         long,
         value_enum,
@@ -371,7 +372,7 @@ struct Setup {
 /// The mutants of one part of a divided run, or all of them.
 fn part_of(all: &[Mutant], shard: Option<Shard>, sharding: Sharding) -> Vec<Mutant> {
     match shard {
-        Some(shard) => sharding.select(shard, all),
+        Some(shard) => sharding.select(shard, all, &crate::shard::alone(all)),
         None => all.to_vec(),
     }
 }

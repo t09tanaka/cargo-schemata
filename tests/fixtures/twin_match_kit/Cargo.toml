@@ -1,0 +1,8 @@
+[package]
+name = "twin-match-kit"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "twin_match_kit"
+path = "src/lib.rs"
