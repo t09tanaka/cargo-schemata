@@ -632,23 +632,30 @@ fn run_tests(args: &Args) -> Result<i32> {
                     .to_owned());
                 None
             } else {
+                // A trace process runs one test, so it gets its own thread
+                // count, and the share is spread over more of them.
+                let trace_tests = Tests {
+                    test_threads: Some(par.trace_threads),
+                    ..tests
+                };
                 match route::trace(
-                    &tests,
+                    &trace_tests,
                     &prepared.test_binaries,
                     &route::BaselineRun {
                         libtest: &libtest,
                         took: &took_each,
                     },
                     global,
-                    jobs,
+                    par.trace_workers,
                     route::trace_budget(baseline),
                     timeout,
                 )? {
                     route::TraceResult::Routing(tr) => {
                         say(format!(
-                            "traced: {} tests run alone, {} binar(ies) run whole ({:.1}s)",
+                            "traced: {} tests run alone, {} binar(ies) run whole, {} worker(s) ({:.1}s)",
                             tr.tests,
                             tr.whole_binaries,
+                            par.trace_workers,
                             t.elapsed().as_secs_f64()
                         ));
                         Some(tr.routing)

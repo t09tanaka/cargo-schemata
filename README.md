@@ -390,6 +390,12 @@ printed and the run goes on. The baseline runs with the same thread count as
 the mutants, so the limit derived from it (see below) is that of the same
 conditions; nothing is skipped and no limit is raised for it.
 
+Tracing (see Routing) runs each test alone, so a trace process is started with
+`RUST_TEST_THREADS=1` (or the user's `--test-threads N`), and share / that many
+trace processes (at least 1) run at a time. `--jobs` and `CARGO_SCHEMATA_JOBS`
+bound the mutant runs only: tracing ends before the first mutant starts, so the
+two never overlap. The `traced:` line prints the number of trace workers.
+
 ### Time limits
 
 A mutant's tests get `max(20 seconds, 5 x the baseline, rounded up to the second)`,

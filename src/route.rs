@@ -236,14 +236,14 @@ pub struct BaselineRun<'a> {
     pub took: &'a [Duration],
 }
 
-/// List the tests of each libtest binary and run each alone, `jobs` at a time,
-/// recording the mutants it reaches and the time it takes.
+/// List the tests of each libtest binary and run each alone, `workers` at a
+/// time, recording the mutants it reaches and the time it takes.
 pub fn trace(
     tests: &Tests,
     bins: &[TestBinary],
     baseline: &BaselineRun,
     global: HashSet<usize>,
-    jobs: usize,
+    workers: usize,
     budget: Duration,
     timeout: Duration,
 ) -> Result<TraceResult> {
@@ -294,7 +294,7 @@ pub fn trace(
     let error: Mutex<Option<anyhow::Error>> = Mutex::new(None);
     let file = |b: usize, t: usize| dir.join(format!("{b}-{t}.txt"));
     std::thread::scope(|scope| {
-        for worker in 0..jobs.min(work.len()).max(1) {
+        for worker in 0..workers.min(work.len()).max(1) {
             let (routes, broken, over, next, error, work, file, micros) = (
                 &routes, &broken, &over, &next, &error, &work, &file, &micros,
             );

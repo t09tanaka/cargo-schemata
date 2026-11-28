@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **Tracing uses the whole share.** Each trace process runs one test, but
+  tracing ran only as many of them at a time as there were mutant jobs, each
+  with the mutant jobs' thread count. On an 8-core runner (2 jobs of 4 threads)
+  tracing 615 tests took 167.9 s, a third of a 500 s run, with 2 of 8 threads
+  busy. A trace process now gets `RUST_TEST_THREADS=1` (or the user's
+  `--test-threads N`), and share / that many run at a time (at least 1).
+  `--jobs` and `CARGO_SCHEMATA_JOBS` still cap the mutant jobs exactly as
+  before, but not tracing: tracing ends before any mutant runs, so its
+  processes never share the machine with the jobs. On a 12-thread machine,
+  the same 615 tests of a 107-mutant run were traced in 48.7 s instead of
+  186.6 s, and the run took 430 s instead of 614 s, with the same result for
+  every mutant.
+- The `traced:` line prints the number of trace workers.
+- **What can differ:** a test that passes alone but fails when more trace
+  processes run at the same time now makes its binary run whole for every
+  mutant. That changes the plan, not the outcome: each mutant's result is the
+  same.
 - **Changed behaviour:** with one package selected (run inside a workspace
   member, or `-p <member>`), the member's own `.cargo/mutants.toml` now
   applies; before, only the workspace root's file was read and a member's

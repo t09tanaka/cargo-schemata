@@ -73,6 +73,13 @@ pub struct Parallelism {
     pub over_share: bool,
     /// The share the numbers above were made from.
     pub share: usize,
+    /// `RUST_TEST_THREADS` for a trace process, which runs one test: the
+    /// user's `--test-threads`, else 1.
+    pub trace_threads: usize,
+    /// Trace processes at a time: the share / [`Self::trace_threads`], at
+    /// least 1. `--jobs` does not bound them; tracing runs before any mutant,
+    /// so it never overlaps with the jobs.
+    pub trace_workers: usize,
 }
 
 fn positive(value: Option<String>) -> Option<usize> {
@@ -127,11 +134,14 @@ pub fn parallelism(
         None => (share / 4).clamp(1, 4),
     });
     let test_threads = user_threads.unwrap_or_else(|| (share / jobs.max(1)).max(1));
+    let trace_threads = user_threads.unwrap_or(1);
     Ok(Parallelism {
         jobs,
         test_threads,
         over_share: given.is_some() && jobs * test_threads > share,
         share,
+        trace_threads,
+        trace_workers: (share / trace_threads).max(1),
     })
 }
 
@@ -579,6 +589,44 @@ mod tests {
     fn jt(par: Result<Parallelism>) -> (usize, usize) {
         let p = par.unwrap();
         (p.jobs, p.test_threads)
+    }
+
+    fn trace(
+        cli: Option<usize>,
+        user: Option<usize>,
+        cpus: usize,
+        pairs: &[(&str, &str)],
+    ) -> (usize, usize) {
+        let p = parallelism(cli, user, cpus, &env(pairs)).unwrap();
+        (p.trace_workers, p.trace_threads)
+    }
+
+    #[test]
+    fn tracing_runs_one_thread_per_process_across_the_whole_share() {
+        // 8 threads: 2 mutant jobs of 4, but 8 trace processes of 1.
+        assert_eq!(trace(None, None, 8, &[]), (8, 1));
+        assert_eq!(trace(None, None, 64, &[("RUST_TEST_THREADS", "6")]), (6, 1));
+    }
+
+    #[test]
+    fn a_user_test_threads_is_kept_for_tracing_and_divides_the_share() {
+        assert_eq!(trace(None, Some(2), 8, &[]), (4, 2));
+        assert_eq!(trace(None, Some(3), 8, &[]), (2, 3));
+    }
+
+    #[test]
+    fn explicit_jobs_cap_the_mutant_jobs_but_not_tracing() {
+        let vars = [("CARGO_SCHEMATA_JOBS", "1")];
+        let p = parallelism(Some(1), None, 8, &env(&[])).unwrap();
+        assert_eq!((p.jobs, p.trace_workers, p.trace_threads), (1, 8, 1));
+        let p = parallelism(None, None, 8, &env(&vars)).unwrap();
+        assert_eq!((p.jobs, p.trace_workers), (1, 8));
+    }
+
+    #[test]
+    fn a_share_smaller_than_the_threads_still_traces_with_one_worker() {
+        assert_eq!(trace(None, Some(16), 8, &[]), (1, 16));
+        assert_eq!(trace(None, None, 1, &[]), (1, 1));
     }
 
     #[test]
