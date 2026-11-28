@@ -592,7 +592,7 @@ fn run_tests(args: &Args) -> Result<i32> {
         };
         let trace_file = tmp_root.join("trace-baseline.txt");
         let t = Instant::now();
-        let (baseline, took_each, libtest) = match tests.baseline(
+        let (baseline, took_each, libtest, cpu) = match tests.baseline(
             &prepared.test_binaries,
             explicit,
             route_ok.then_some(trace_file.as_path()),
@@ -601,7 +601,8 @@ fn run_tests(args: &Args) -> Result<i32> {
                 took,
                 took_each,
                 libtest,
-            } => (took, took_each, libtest),
+                cpu,
+            } => (took, took_each, libtest, cpu),
             Baseline::Failed { binary, log_tail } => {
                 eprintln!("{log_tail}");
                 eprintln!(
@@ -617,8 +618,19 @@ fn run_tests(args: &Args) -> Result<i32> {
             }
         };
         let timeout = exec::mutant_timeout(baseline, explicit);
+        let wall = baseline.as_secs_f64();
+        let cpu = cpu.map(|c| c.as_secs_f64());
+        let first_threads =
+            exec::mutant_threads(par.test_threads, par.share, jobs, par.adaptive, wall, cpu);
+        let chosen = match cpu.filter(|_| par.adaptive && wall > 0.0) {
+            Some(c) => format!(
+                ", mutants with {first_threads} (tests used {:.2} of their threads)",
+                c / (wall * par.test_threads as f64)
+            ),
+            None => String::new(),
+        };
         say(format!(
-            "baseline: tests pass in {:.1}s; a mutant gets {}s; {jobs} job(s) of {} test thread(s) ({:.1}s)",
+            "baseline: tests pass in {:.1}s; a mutant gets {}s; {jobs} job(s) of {} test thread(s){chosen} ({:.1}s)",
             baseline.as_secs_f64(),
             timeout.as_secs(),
             par.test_threads,
@@ -697,6 +709,7 @@ fn run_tests(args: &Args) -> Result<i32> {
             // again with `timeout`, unless the limit was given.
             routed_floor: explicit.is_none().then_some(exec::MINIMUM_ROUTED_TIMEOUT),
             routing: routing.as_ref(),
+            first_threads: Some(first_threads),
         };
         let ran = exec::run_embedded(
             &tests,

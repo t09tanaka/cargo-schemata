@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **Tests that wait get more threads per process again.** Since 0.5.0 every
+  test process got `RUST_TEST_THREADS` = share / jobs; on a 2-thread runner
+  that is 1, and a suite whose tests start processes and wait for them took
+  742 s in the mutant phase instead of 458 s with 0.4.0 (which left libtest's
+  default), with the same result. The baseline now also measures how much CPU
+  its processes used, u = cpu / (wall x b) of their b threads, and the first
+  run of each mutant gets b / max(u, 1 / jobs) threads (at least b, at most the
+  share). Tests that keep their threads busy keep b, so CPU-bound suites are
+  run as before. The baseline itself, the limit derived from it, and the run
+  alone after a time-out keep b threads. `--test-threads N`,
+  `RUST_TEST_THREADS` and `NEXTEST_TEST_THREADS` turn this off. The
+  `baseline:` line ends with the chosen threads and u, for example
+  `2 job(s) of 1 test thread(s), mutants with 2 (tests used 0.48 of their
+  threads)`.
+
 ## 0.7.0 - 2026-11-28
 
 - **Tracing uses the whole share.** Each trace process runs one test, but
