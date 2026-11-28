@@ -80,6 +80,60 @@ pub struct Parallelism {
     /// least 1. `--jobs` does not bound them; tracing runs before any mutant,
     /// so it never overlaps with the jobs.
     pub trace_workers: usize,
+    /// The mutants' threads may be raised from what the baseline measured
+    /// ([`mutant_threads`]): neither `--test-threads` nor a share variable was
+    /// given.
+    pub adaptive: bool,
+}
+
+/// The threads of every mutant test process in the first pass, chosen from
+/// the baseline, which ran at `base` threads (`b`) per process.
+///
+/// `wall` is the baseline's wall time (`W`) and `cpu` the user + system time
+/// its processes used (`C`), `None` when it could not be measured. The tests
+/// used `u = C / (W x b)` of their threads; a suite that waits (on processes,
+/// sleeps, I/O) leaves most of them idle, so each process may run more:
+/// `t = clamp(floor(b / max(u, 1/jobs)), b, share)`. A suite that keeps its
+/// threads busy (`u` near 1) keeps `b`, and jobs x `t` never exceeds jobs x
+/// share. Without a measurement, a `wall` of zero or less, or with
+/// `adaptive` off, it is `b`.
+pub fn mutant_threads(
+    base: usize,
+    share: usize,
+    jobs: usize,
+    adaptive: bool,
+    wall: f64,
+    cpu: Option<f64>,
+) -> usize {
+    let base = base.max(1);
+    let Some(cpu) = cpu.filter(|_| adaptive && wall > 0.0) else {
+        return base;
+    };
+    let used = cpu.max(0.0) / (wall * base as f64);
+    let floor = 1.0 / jobs.max(1) as f64;
+    let t = (base as f64 / used.max(floor)).floor() as usize;
+    t.clamp(base, share.max(base))
+}
+
+/// The user + system time of the waited-for child processes of this process
+/// so far, in seconds.
+#[cfg(unix)]
+pub fn children_cpu() -> Option<f64> {
+    let mut u = std::mem::MaybeUninit::<libc::rusage>::zeroed();
+    // SAFETY: getrusage only writes the struct it is given.
+    if unsafe { libc::getrusage(libc::RUSAGE_CHILDREN, u.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    // SAFETY: getrusage returned 0, so it filled the struct.
+    let u = unsafe { u.assume_init() };
+    let secs = |t: libc::timeval| t.tv_sec as f64 + t.tv_usec as f64 / 1e6;
+    Some(secs(u.ru_utime) + secs(u.ru_stime))
+}
+
+/// Not measured on this platform.
+#[cfg(not(unix))]
+pub fn children_cpu() -> Option<f64> {
+    None
 }
 
 fn positive(value: Option<String>) -> Option<usize> {
@@ -117,10 +171,8 @@ pub fn parallelism(
     cpus: usize,
     get: &dyn Fn(&str) -> Option<String>,
 ) -> Result<Parallelism> {
-    let share = SHARE_VARS
-        .iter()
-        .find_map(|v| positive(get(v)))
-        .unwrap_or(cpus.max(1));
+    let from_share = SHARE_VARS.iter().find_map(|v| positive(get(v)));
+    let share = from_share.unwrap_or(cpus.max(1));
     // The option wins, so the variable is not even read as an error then.
     let from_env = match get(JOBS_VAR).filter(|v| cli_jobs.is_none() && !v.trim().is_empty()) {
         None => None,
@@ -142,6 +194,7 @@ pub fn parallelism(
         share,
         trace_threads,
         trace_workers: (share / trace_threads).max(1),
+        adaptive: user_threads.is_none() && from_share.is_none(),
     })
 }
 
@@ -329,6 +382,8 @@ pub enum Baseline {
         /// Per binary: its output is libtest's (`running N tests`), so it
         /// understands `--list` and `--exact`.
         libtest: Vec<bool>,
+        /// The user + system time of the baseline's processes, if measured.
+        cpu: Option<Duration>,
     },
     Failed {
         binary: String,
@@ -348,6 +403,7 @@ impl Tests<'_> {
     ) -> Result<Baseline> {
         let tmp = self.tmp("baseline")?;
         let start = Instant::now();
+        let cpu_before = children_cpu();
         let mut libtest = Vec::new();
         let mut took_each = Vec::new();
         for (n, bin) in bins.iter().enumerate() {
@@ -379,10 +435,15 @@ impl Tests<'_> {
                 l.starts_with("running ") && l.ends_with(" tests") || l == "running 1 test"
             }));
         }
+        let took = start.elapsed();
+        let cpu = cpu_before
+            .zip(children_cpu())
+            .map(|(a, b)| Duration::from_secs_f64((b - a).max(0.0)));
         Ok(Baseline::Passed {
-            took: start.elapsed(),
+            took,
             took_each,
             libtest,
+            cpu,
         })
     }
 }
@@ -404,6 +465,18 @@ fn run_one(
         None => (None, None),
     };
     let limit = pool.limit(pass, estimate);
+    // The run alone gets the baseline's threads, as its limit is the baseline's.
+    let first;
+    let tests = match (pass, pool.first_threads) {
+        (Pass::First, Some(n)) => {
+            first = Tests {
+                test_threads: Some(n),
+                ..*tests
+            };
+            &first
+        }
+        _ => tests,
+    };
     match plan {
         None => tests.run(bins, Some(id), job, Some(limit)),
         Some(Plan::Unreached) => Ok((Ran::Unreached, Duration::ZERO)),
@@ -431,6 +504,10 @@ pub struct Pool<'a> {
     /// run gets `timeout` then.
     pub routed_floor: Option<Duration>,
     pub routing: Option<&'a Routing>,
+    /// The threads of each test process in the first pass
+    /// ([`mutant_threads`]); the run alone keeps those of [`Tests`], the
+    /// baseline's. `None`: [`Tests`]'s for both.
+    pub first_threads: Option<usize>,
 }
 
 /// Which of the two runs of a mutant.
@@ -1024,6 +1101,7 @@ mod tests {
                 timeout: Duration::from_millis(400),
                 routed_floor: None,
                 routing: None,
+                first_threads: None,
             },
             &|id, ran, _| seen.lock().unwrap().push((id, ran)),
             &|r| reruns.store(r.count, Ordering::Relaxed),
@@ -1041,6 +1119,126 @@ mod tests {
         );
         assert_eq!(reruns.load(Ordering::Relaxed), 1);
         assert_eq!(seen.lock().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn mutant_threads_follow_how_busy_the_baseline_kept_its_threads() {
+        // (b, share, jobs, adaptive, wall, cpu) -> t
+        type Case = (usize, usize, usize, bool, f64, Option<f64>, usize);
+        let cases: &[Case] = &[
+            // CPU-bound: every thread busy keeps b
+            (1, 2, 2, true, 10.0, Some(10.0), 1),
+            (4, 16, 4, true, 10.0, Some(40.0), 4),
+            // more CPU than threads (helper threads) still keeps b
+            (2, 8, 4, true, 10.0, Some(30.0), 2),
+            // waiting: at most 1/jobs used gives the whole share
+            (1, 2, 2, true, 10.0, Some(5.0), 2),
+            (1, 2, 2, true, 10.0, Some(4.8), 2),
+            (4, 16, 4, true, 10.0, Some(10.0), 16),
+            // in between: floor(b / u)
+            (4, 16, 4, true, 10.0, Some(20.0), 8),
+            (4, 16, 4, true, 10.0, Some(30.0), 5),
+            // just above 1/jobs is less than the share
+            (1, 2, 2, true, 10.0, Some(5.1), 1),
+            // one job: never more than b
+            (8, 8, 1, true, 10.0, Some(0.5), 8),
+            // more jobs than the share: b = 1, at most the share
+            (1, 4, 8, true, 10.0, Some(0.0), 4),
+            (1, 4, 8, true, 10.0, Some(10.0), 1),
+            // no CPU at all: the share
+            (2, 8, 4, true, 10.0, Some(0.0), 8),
+            // nothing measured or no wall time: b
+            (2, 8, 4, true, 10.0, None, 2),
+            (2, 8, 4, true, 0.0, Some(1.0), 2),
+            (2, 8, 4, true, -1.0, Some(1.0), 2),
+            // adaptation off: b
+            (2, 8, 4, false, 10.0, Some(0.0), 2),
+        ];
+        for &(b, share, jobs, adaptive, wall, cpu, want) in cases {
+            assert_eq!(
+                mutant_threads(b, share, jobs, adaptive, wall, cpu),
+                want,
+                "b={b} share={share} jobs={jobs} adaptive={adaptive} wall={wall} cpu={cpu:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_users_threads_and_a_share_variable_turn_adaptation_off() {
+        assert!(par(None, 8, &[]).unwrap().adaptive);
+        assert!(par(Some(2), 8, &[(JOBS_VAR, "3")]).unwrap().adaptive);
+        assert!(
+            !par(None, 8, &[("RUST_TEST_THREADS", "4")])
+                .unwrap()
+                .adaptive
+        );
+        assert!(
+            !par(None, 8, &[("NEXTEST_TEST_THREADS", "4")])
+                .unwrap()
+                .adaptive
+        );
+        // a share variable that is not a number does not supply the share
+        assert!(
+            par(None, 8, &[("NEXTEST_TEST_THREADS", "num-cpus")])
+                .unwrap()
+                .adaptive
+        );
+        assert!(!parallelism(None, Some(2), 8, &env(&[])).unwrap().adaptive);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_baseline_measures_the_cpu_of_its_processes() {
+        let s = Scratch::new("baseline-cpu");
+        let (bin, args) = sh("i=0; while [ $i -lt 20000 ]; do i=$((i+1)); done");
+        let tests = Tests {
+            bin_args: &args,
+            tmp_root: &s.0,
+            early_kill: false,
+            test_threads: None,
+        };
+        match tests.baseline(&[bin], None, None).unwrap() {
+            Baseline::Passed { cpu, .. } => assert!(cpu.is_some_and(|c| c > Duration::ZERO)),
+            _ => panic!("the baseline should pass"),
+        }
+    }
+
+    #[test]
+    fn the_first_pass_gets_the_adapted_threads_and_the_run_alone_the_baselines() {
+        let s = Scratch::new("pool-threads");
+        // mutant 2 times out in its first run; each run records its threads
+        let script = "echo \"$CARGO_SCHEMATA_MUTANT $RUST_TEST_THREADS\" >> threads; case \"$CARGO_SCHEMATA_MUTANT\" in 2) if [ -e seen2 ]; then exit 0; else touch seen2; sleep 30; fi;; *) exit 0;; esac";
+        let (mut bin, args) = sh(script);
+        bin.cwd = s.0.to_string_lossy().into_owned();
+        let tests = Tests {
+            bin_args: &args,
+            tmp_root: &s.0.join("tmp"),
+            early_kill: false,
+            test_threads: Some(1),
+        };
+        let reruns = AtomicUsize::new(0);
+        run_embedded(
+            &tests,
+            &[bin],
+            &[1, 2],
+            &Pool {
+                jobs: 2,
+                timeout: Duration::from_millis(400),
+                routed_floor: None,
+                routing: None,
+                first_threads: Some(2),
+            },
+            &|_, _, _| {},
+            &|r| reruns.store(r.count, Ordering::Relaxed),
+        )
+        .unwrap();
+        assert_eq!(reruns.load(Ordering::Relaxed), 1);
+        let text = std::fs::read_to_string(s.0.join("threads")).unwrap();
+        let mut lines: Vec<&str> = text.lines().collect();
+        let last = lines.pop();
+        lines.sort();
+        assert_eq!(lines, ["1 2", "2 2"]);
+        assert_eq!(last, Some("2 1"));
     }
 
     /// What a routed run with early kill does to three kinds of mutants.
@@ -1073,6 +1271,7 @@ mod tests {
             timeout: secs(20),
             routed_floor: None,
             routing: None,
+            first_threads: None,
         };
         let results =
             run_embedded(&tests, &[bin], &[1, 2, 3, 4], &pool, &|_, _, _| {}, &|_| {}).unwrap();

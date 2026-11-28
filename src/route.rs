@@ -531,6 +531,7 @@ mod tests {
             timeout: secs(120),
             routed_floor: Some(secs(10)),
             routing: Some(&r),
+            first_threads: None,
         };
         let limit = |pool: &Pool, pass, id| {
             let estimate = pool.routing.and_then(|r| r.plan_and_estimate(id, 1).1);
@@ -624,6 +625,7 @@ mod tests {
                     timeout: Duration::from_secs(2),
                     routed_floor: Some(Duration::from_millis(200)),
                     routing: Some(&routing),
+                    first_threads: None,
                 },
                 &|_, _, _| {},
                 &|r| reruns.store(r.count, Ordering::Relaxed),

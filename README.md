@@ -390,6 +390,17 @@ printed and the run goes on. The baseline runs with the same thread count as
 the mutants, so the limit derived from it (see below) is that of the same
 conditions; nothing is skipped and no limit is raised for it.
 
+While the baseline runs, the user + system time of its processes is measured
+(on Unix, from `getrusage(RUSAGE_CHILDREN)`). With b = share / jobs threads per
+process, the tests used u = cpu / (wall x b) of their threads. Tests that wait
+(on processes they start, sleeps, I/O) leave threads idle, so in the first run
+of each mutant every process gets t = b / max(u, 1 / jobs) threads (rounded
+down), at least b and at most the share; tests that keep their threads busy
+keep b. A mutant that reaches its limit there is run again alone with b threads
+and the baseline's limit, as before. The `baseline:` line prints t and u. This
+is off (every process keeps b) when `--test-threads N` is given or the share
+comes from `RUST_TEST_THREADS` or `NEXTEST_TEST_THREADS`.
+
 Tracing (see Routing) runs each test alone, so a trace process is started with
 `RUST_TEST_THREADS=1` (or the user's `--test-threads N`), and share / that many
 trace processes (at least 1) run at a time. `--jobs` and `CARGO_SCHEMATA_JOBS`
