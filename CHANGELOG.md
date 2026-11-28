@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 - 2026-11-28
 
 - **Tracing uses the whole share.** Each trace process runs one test, but
   tracing ran only as many of them at a time as there were mutant jobs, each
