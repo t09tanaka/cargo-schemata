@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **Changed behaviour:** with one package selected (run inside a workspace
+  member, or `-p <member>`), the member's own `.cargo/mutants.toml` now
+  applies; before, only the workspace root's file was read and a member's
+  `exclude_re` was silently ignored. Without a member file the root file is
+  read as before, and `--config` always wins.
+- **Changed behaviour:** with one package selected, a `--file` or `--exclude`
+  glob (and `examine_globs` / `exclude_globs`) may now name a path relative to
+  the package directory (`src/x.rs`) as well as to the workspace root
+  (`crates/member/src/x.rs`). The listed and recorded paths stay relative to
+  the workspace root, so reports, `merge` and parts do not change.
+
 ## 0.6.0 - 2026-11-22
 
 - **`--sharding balanced`, and `balanced` is the new default.** The mutants

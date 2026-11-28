@@ -389,14 +389,31 @@ fn discover(args: &Args) -> Result<Setup> {
         Utf8Path::new(".")
     };
     let workspace = Workspace::open(start_dir)?;
+    let package_filter = if !args.packages.is_empty() {
+        PackageFilter::Explicit(args.packages.clone())
+    } else if args.workspace {
+        PackageFilter::All
+    } else {
+        PackageFilter::Auto(start_dir.to_owned())
+    };
+    let packages = workspace.select(&package_filter)?;
+    // With one package, its own config file wins over the workspace root's.
+    let package_dir = match packages.as_slice() {
+        [one] => Some(one.relative_dir.clone()),
+        _ => None,
+    };
     let config = if args.no_config {
         Config::default()
     } else if let Some(config_path) = &args.config {
         Config::read_file(config_path.as_ref())?
     } else {
-        Config::read_tree_config(workspace.root())?
+        let member_config = package_dir
+            .as_ref()
+            .map(|d| workspace.root().join(d))
+            .filter(|d| d.join(".cargo").join("mutants.toml").exists());
+        Config::read_tree_config(member_config.as_deref().unwrap_or(workspace.root()))?
     };
-    let options = Options::new(
+    let mut options = Options::new(
         &Filters {
             error: args.error.clone(),
             exclude_globs: args.exclude.clone(),
@@ -408,19 +425,16 @@ fn discover(args: &Args) -> Result<Setup> {
         },
         &config,
     )?;
-    let package_filter = if !args.packages.is_empty() {
-        PackageFilter::Explicit(args.packages.clone())
-    } else if args.workspace {
-        PackageFilter::All
-    } else {
-        PackageFilter::Auto(start_dir.to_owned())
-    };
-    let packages = workspace.select(&package_filter)?;
+    options.package_dir = package_dir;
     let mut mutants = visit::walk_tree(workspace.root(), &packages, &options)
         .context("failed to discover mutants")?;
     // Checked against the whole tree, before --in-diff: a diff that does not
     // touch a module must not make the glob of that module look empty.
-    let files: Vec<&std::path::Path> = mutants.iter().map(|m| m.file.as_std_path()).collect();
+    let files: Vec<&std::path::Path> = mutants
+        .iter()
+        .flat_map(|m| options.glob_paths(&m.file))
+        .map(Utf8Path::as_std_path)
+        .collect();
     let empty_globs = find_empty_globs(&files, &args.file, &config.examine_globs)?;
     let mut diff_left_nothing = false;
     if let Some(diff_path) = &args.in_diff {
