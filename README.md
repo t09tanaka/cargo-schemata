@@ -88,7 +88,13 @@ static initializers are listed like any other code.
 
 A glob in `--file` or in `examine_globs` of the config file is empty when no file it matches has a mutant that is left after the other filters. That includes a glob that matches only files given to `--exclude` or `exclude_globs`, and one that matches only files that produce zero mutants (no function worth mutating). The check is made against the whole tree, before `--in-diff` narrows the mutants: a diff that does not touch a module must not make the glob of that module fail, while a glob of a file that no longer exists fails whatever the diff is. `--list` and `--build-only` do not run the check: they print or build what the filters select, and an empty result is not an error there.
 
+### Paths in a workspace
+
+Mutant paths are always shown and recorded relative to the workspace root (`crates/member/src/x.rs`). When one package is selected (run inside a member, or `-p <member>`), a glob in `--file`, `--exclude`, `examine_globs` or `exclude_globs` may also name the path relative to that package (`src/x.rs`); a file is examined when either form matches, and left out when either form matches an exclude glob. With several packages selected (`--workspace`, several `-p`), globs match only the root-relative path.
+
 ### `.cargo/mutants.toml`
+
+With one package selected, the package's own `.cargo/mutants.toml` is read if it exists; otherwise the one at the workspace root. With several packages selected, only the workspace root's file is read. `--config <file>` always wins, and `--no-config` reads none.
 
 The file is read like cargo-mutants does, and one file can serve both tools:
 

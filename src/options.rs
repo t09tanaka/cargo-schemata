@@ -9,7 +9,7 @@ use std::fs::read_to_string;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use itertools::Itertools;
 use regex::RegexSet;
@@ -161,6 +161,9 @@ pub struct Options {
     pub skip_calls: Vec<String>,
     /// Error values for functions returning `Result`.
     pub error_values: Vec<String>,
+    /// The directory of the one selected package, relative to the workspace
+    /// root: globs also match a path relative to it.
+    pub package_dir: Option<Utf8PathBuf>,
 }
 
 impl Options {
@@ -182,6 +185,7 @@ impl Options {
             skip_calls.push("with_capacity".to_owned());
         }
         Ok(Options {
+            package_dir: None,
             error_values: args
                 .error
                 .iter()
@@ -217,14 +221,33 @@ impl Options {
     ///
     /// That is: it matches the examine globset (if specified) and does not match the exclude globset
     /// (if specified).
+    /// With one package selected, a glob may name the path relative to the
+    /// workspace root or relative to the package directory.
     pub fn allows_source_file_path(&self, path: &Utf8Path) -> bool {
+        let paths = self.glob_paths(path);
         self.examine_globset
             .as_ref()
-            .is_none_or(|g| g.is_match(path))
+            .is_none_or(|g| paths.iter().any(|p| g.is_match(p)))
             && !self
                 .exclude_globset
                 .as_ref()
-                .is_some_and(|g| g.is_match(path))
+                .is_some_and(|g| paths.iter().any(|p| g.is_match(p)))
+    }
+
+    /// The forms of a workspace-relative path that globs are matched against:
+    /// the path itself and, with one package selected, the path relative to
+    /// the package directory.
+    pub fn glob_paths<'a>(&self, path: &'a Utf8Path) -> Vec<&'a Utf8Path> {
+        let mut paths = vec![path];
+        if let Some(rel) = self
+            .package_dir
+            .as_deref()
+            .filter(|d| !d.as_str().is_empty())
+            .and_then(|d| path.strip_prefix(d).ok())
+        {
+            paths.push(rel);
+        }
+        paths
     }
 
     /// True if the options allow this mutant to be listed.
